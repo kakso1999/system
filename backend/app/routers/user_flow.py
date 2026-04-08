@@ -40,8 +40,6 @@ async def welcome(staff_code: str, request: Request, db: AsyncIOMotorDatabase = 
     if staff.get("campaign_id"):
         campaign = await db.campaigns.find_one({"_id": staff["campaign_id"], "status": "active"})
     if not campaign:
-        campaign = await db.campaigns.find_one({"status": "active"})
-    if not campaign:
         raise HTTPException(status_code=404, detail="No active campaign")
 
     # Record scan: increment staff total_scans and log it
