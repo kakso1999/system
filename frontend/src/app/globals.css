@@ -1,26 +1,70 @@
 @import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-primary: #0253cd;
+  --color-primary-dim: #0048b5;
+  --color-primary-container: #789dff;
+  --color-primary-fixed: #789dff;
+  --color-primary-fixed-dim: #618eff;
+  --color-on-primary: #f1f2ff;
+  --color-on-primary-container: #001f57;
+
+  --color-secondary: #8c4a00;
+  --color-secondary-dim: #7b4000;
+  --color-secondary-container: #ffc69a;
+  --color-on-secondary: #fff0e7;
+  --color-on-secondary-container: #6f3a00;
+
+  --color-tertiary: #8c3a8c;
+  --color-tertiary-container: #f395ee;
+
+  --color-surface: #f8f5ff;
+  --color-surface-dim: #ced1ff;
+  --color-surface-bright: #f8f5ff;
+  --color-surface-variant: #d8daff;
+  --color-surface-container: #e6e6ff;
+  --color-surface-container-low: #f1efff;
+  --color-surface-container-high: #dfe0ff;
+  --color-surface-container-highest: #d8daff;
+  --color-surface-container-lowest: #ffffff;
+
+  --color-on-surface: #272c51;
+  --color-on-surface-variant: #545981;
+  --color-on-background: #272c51;
+  --color-background: #f8f5ff;
+
+  --color-outline: #6f749e;
+  --color-outline-variant: #a6aad7;
+
+  --color-error: #b31b25;
+  --color-error-container: #fb5151;
+  --color-on-error: #ffefee;
+
+  --color-inverse-surface: #05092f;
+  --color-inverse-on-surface: #969ac6;
+  --color-inverse-primary: #5c8bff;
+
+  --font-headline: 'Plus Jakarta Sans', sans-serif;
+  --font-body: 'Manrope', sans-serif;
+  --font-label: 'Manrope', sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  display: inline-block;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: normal;
+  word-wrap: normal;
+  white-space: nowrap;
+  direction: ltr;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-on-surface);
+  font-family: var(--font-body);
 }

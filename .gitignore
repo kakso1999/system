@@ -1,0 +1,6 @@
+# codex-subagent managed entries
+__pycache__/
+*.pyc
+.codex-subagent/
+.pytest_cache/
+*.egg-info/
