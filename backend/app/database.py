@@ -1,0 +1,65 @@
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from app.config import get_settings
+
+settings = get_settings()
+
+client: AsyncIOMotorClient = None
+db: AsyncIOMotorDatabase = None
+
+
+async def connect_db():
+    global client, db
+    client = AsyncIOMotorClient(settings.MONGODB_URL)
+    db = client[settings.DATABASE_NAME]
+    await create_indexes()
+
+
+async def close_db():
+    global client
+    if client:
+        client.close()
+
+
+async def create_indexes():
+    # admins
+    await db.admins.create_index("username", unique=True)
+    # staff_users
+    await db.staff_users.create_index("username", unique=True)
+    await db.staff_users.create_index("invite_code", unique=True)
+    await db.staff_users.create_index("phone")
+    await db.staff_users.create_index("parent_id")
+    # staff_relations
+    await db.staff_relations.create_index(
+        [("staff_id", 1), ("ancestor_id", 1)], unique=True
+    )
+    await db.staff_relations.create_index([("ancestor_id", 1), ("level", 1)])
+    # campaigns
+    await db.campaigns.create_index("status")
+    # wheel_items
+    await db.wheel_items.create_index([("campaign_id", 1), ("enabled", 1)])
+    # reward_codes
+    await db.reward_codes.create_index("code", unique=True)
+    await db.reward_codes.create_index([("campaign_id", 1), ("status", 1)])
+    # claims
+    await db.claims.create_index([("phone", 1), ("campaign_id", 1)])
+    await db.claims.create_index("staff_id")
+    await db.claims.create_index([("ip", 1), ("campaign_id", 1)])
+    await db.claims.create_index(
+        [("device_fingerprint", 1), ("campaign_id", 1)]
+    )
+    # commission_logs
+    await db.commission_logs.create_index(
+        [("beneficiary_staff_id", 1), ("status", 1)]
+    )
+    await db.commission_logs.create_index("claim_id")
+    # otp_records - TTL index
+    await db.otp_records.create_index("expires_at", expireAfterSeconds=0)
+    await db.otp_records.create_index([("phone", 1), ("expires_at", 1)])
+    # risk_logs
+    await db.risk_logs.create_index([("created_at", -1)])
+    # system_settings
+    await db.system_settings.create_index("key", unique=True)
+
+
+def get_db() -> AsyncIOMotorDatabase:
+    return db
