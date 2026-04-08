@@ -56,7 +56,8 @@ async def welcome(staff_code: str, db: AsyncIOMotorDatabase = Depends(get_db)):
         },
         "wheel_items": [
             {"id": str(i["_id"]), "display_name": i["display_name"],
-             "type": i["type"], "sort_order": i["sort_order"]}
+             "type": i["type"], "sort_order": i["sort_order"],
+             "weight": i.get("weight", 10)}
             for i in items
         ],
     }

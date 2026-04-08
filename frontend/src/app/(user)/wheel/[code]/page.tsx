@@ -9,6 +9,7 @@ interface WheelItemData {
   id: string;
   display_name: string;
   type: "onsite" | "website";
+  weight: number;
 }
 
 interface SpinResult {
@@ -70,7 +71,18 @@ export default function WheelPage() {
     const size = canvas.width;
     const center = size / 2;
     const radius = center - 10;
-    const segAngle = (2 * Math.PI) / items.length;
+
+    // Build segments: real items + "No Prize" for remaining %
+    const totalPct = items.reduce((s, i) => s + (i.weight || 10), 0);
+    const noPrizePct = Math.max(0, 100 - totalPct);
+    const segments: { name: string; pct: number; color: string }[] = items.map((item, i) => ({
+      name: item.display_name,
+      pct: item.weight || 10,
+      color: COLORS[i % COLORS.length],
+    }));
+    if (noPrizePct > 0) {
+      segments.push({ name: "No Prize", pct: noPrizePct, color: "#c8c8d0" });
+    }
 
     ctx.clearRect(0, 0, size, size);
     ctx.save();
@@ -78,29 +90,35 @@ export default function WheelPage() {
     ctx.rotate((rotation * Math.PI) / 180);
     ctx.translate(-center, -center);
 
-    items.forEach((item, i) => {
-      const startAngle = i * segAngle - Math.PI / 2;
-      const endAngle = startAngle + segAngle;
+    let currentAngle = -Math.PI / 2;
+    segments.forEach((seg) => {
+      const segAngle = (seg.pct / 100) * 2 * Math.PI;
+      const endAngle = currentAngle + segAngle;
 
       ctx.beginPath();
       ctx.moveTo(center, center);
-      ctx.arc(center, center, radius, startAngle, endAngle);
+      ctx.arc(center, center, radius, currentAngle, endAngle);
       ctx.closePath();
-      ctx.fillStyle = COLORS[i % COLORS.length];
+      ctx.fillStyle = seg.color;
       ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.3)";
+      ctx.strokeStyle = "rgba(255,255,255,0.4)";
       ctx.lineWidth = 2;
       ctx.stroke();
 
       // Text
-      ctx.save();
-      ctx.translate(center, center);
-      ctx.rotate(startAngle + segAngle / 2);
-      ctx.textAlign = "center";
-      ctx.fillStyle = "#fff";
-      ctx.font = "bold 13px 'Plus Jakarta Sans', sans-serif";
-      ctx.fillText(item.display_name, radius * 0.6, 5);
-      ctx.restore();
+      if (seg.pct >= 5) {
+        ctx.save();
+        ctx.translate(center, center);
+        ctx.rotate(currentAngle + segAngle / 2);
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 12px 'Plus Jakarta Sans', sans-serif";
+        const label = seg.name.length > 8 ? seg.name.slice(0, 8) + ".." : seg.name;
+        ctx.fillText(label, radius * 0.6, 4);
+        ctx.restore();
+      }
+
+      currentAngle = endAngle;
     });
 
     ctx.restore();
@@ -133,10 +151,27 @@ export default function WheelPage() {
       });
       setResult(res.data);
 
+      // Calculate target angle based on percentage segments
+      const totalPct = items.reduce((s, i) => s + (i.weight || 10), 0);
+      const noPrizePct = Math.max(0, 100 - totalPct);
       const targetIndex = res.data.result_index;
-      const segAngle = 360 / items.length;
-      const targetAngle = 360 - (targetIndex * segAngle + segAngle / 2);
-      const totalRotation = 360 * 8 + targetAngle; // 8 full spins + land on target
+
+      let targetAngleDeg: number;
+      if (targetIndex === -1) {
+        // No prize — land on the "No Prize" segment (at the end)
+        const noPrizeStart = (totalPct / 100) * 360;
+        targetAngleDeg = 360 - (noPrizeStart + (noPrizePct / 100) * 360 / 2);
+      } else {
+        // Land on the winning item's segment center
+        let angleBefore = 0;
+        for (let i = 0; i < targetIndex; i++) {
+          angleBefore += (items[i].weight || 10);
+        }
+        const itemPct = items[targetIndex].weight || 10;
+        targetAngleDeg = 360 - ((angleBefore + itemPct / 2) / 100) * 360;
+      }
+
+      const totalRotation = 360 * 8 + targetAngleDeg;
 
       let start: number | null = null;
       const duration = 5000;
