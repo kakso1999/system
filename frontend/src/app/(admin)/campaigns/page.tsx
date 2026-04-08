@@ -15,17 +15,13 @@ export default function CampaignsPage() {
   const [modal, setModal] = useState<ModalMode>(null);
   const [selected, setSelected] = useState<Campaign | null>(null);
 
-  // Campaign form
-  const [form, setForm] = useState({ name: "", description: "", start_time: "", end_time: "", rules_text: "", prize_url: "", max_claims_per_user: 1 });
+  const [form, setForm] = useState({ name: "", description: "", start_time: "", end_time: "", rules_text: "", max_claims_per_user: 1 });
 
-  // Wheel items
   const [wheelItems, setWheelItems] = useState<WheelItem[]>([]);
   const [wheelForm, setWheelForm] = useState({ name: "", display_name: "", type: "onsite" as "onsite" | "website", weight: 10, sort_order: 0, redirect_url: "", display_text: "", enabled: true });
   const [editingWheel, setEditingWheel] = useState<WheelItem | null>(null);
 
-  // Staff binding
   const [allStaff, setAllStaff] = useState<Staff[]>([]);
-  const [campaignStaff, setCampaignStaff] = useState<Staff[]>([]);
   const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
 
   const loadCampaigns = useCallback(async () => {
@@ -42,7 +38,7 @@ export default function CampaignsPage() {
 
   const openCreate = () => {
     setSelected(null);
-    setForm({ name: "", description: "", start_time: "", end_time: "", rules_text: "", prize_url: "", max_claims_per_user: 1 });
+    setForm({ name: "", description: "", start_time: "", end_time: "", rules_text: "", max_claims_per_user: 1 });
     setModal("create");
   };
 
@@ -51,7 +47,7 @@ export default function CampaignsPage() {
     setForm({
       name: c.name, description: c.description,
       start_time: c.start_time?.slice(0, 16) || "", end_time: c.end_time?.slice(0, 16) || "",
-      rules_text: c.rules_text || "", prize_url: c.prize_url || "",
+      rules_text: c.rules_text || "",
       max_claims_per_user: c.max_claims_per_user || 1,
     });
     setModal("edit");
@@ -61,7 +57,7 @@ export default function CampaignsPage() {
     setSelected(c);
     setModal("wheel");
     setEditingWheel(null);
-    setWheelForm({ name: "", display_name: "", type: "onsite", weight: 10, sort_order: 0, redirect_url: "", display_text: "", enabled: true });
+    resetWheelForm();
     try {
       const res = await api.get<WheelItem[]>("/api/admin/wheel-items/", { params: { campaign_id: c.id } });
       setWheelItems(res.data);
@@ -73,13 +69,12 @@ export default function CampaignsPage() {
     setModal("staff");
     try {
       const [staffRes, boundRes] = await Promise.all([
-        api.get<PageResponse<Staff>>("/api/admin/staff/", { params: { page: 1, page_size: 200 } }),
+        api.get<PageResponse<Staff>>("/api/admin/staff/", { params: { page: 1, page_size: 100 } }),
         api.get<Staff[]>(`/api/admin/campaigns/${c.id}/staff`),
       ]);
       setAllStaff(staffRes.data.items);
-      setCampaignStaff(boundRes.data);
       setSelectedStaffIds(boundRes.data.map((s: Staff) => s.id));
-    } catch { setAllStaff([]); setCampaignStaff([]); }
+    } catch { setAllStaff([]); setSelectedStaffIds([]); }
   };
 
   const handleSaveCampaign = async (e: React.FormEvent) => {
@@ -116,7 +111,10 @@ export default function CampaignsPage() {
     }
   };
 
-  // Wheel item handlers
+  const resetWheelForm = () => {
+    setWheelForm({ name: "", display_name: "", type: "onsite", weight: 10, sort_order: 0, redirect_url: "", display_text: "", enabled: true });
+  };
+
   const handleSaveWheel = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selected) return;
@@ -127,7 +125,7 @@ export default function CampaignsPage() {
         await api.post("/api/admin/wheel-items/", { ...wheelForm, campaign_id: selected.id });
       }
       setEditingWheel(null);
-      setWheelForm({ name: "", display_name: "", type: "onsite", weight: 10, sort_order: 0, redirect_url: "", display_text: "", enabled: true });
+      resetWheelForm();
       const res = await api.get<WheelItem[]>("/api/admin/wheel-items/", { params: { campaign_id: selected.id } });
       setWheelItems(res.data);
     } catch (err: unknown) {
@@ -157,7 +155,6 @@ export default function CampaignsPage() {
     }
   };
 
-  // Staff binding
   const toggleStaffSelect = (id: string) => {
     setSelectedStaffIds(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
   };
@@ -171,7 +168,9 @@ export default function CampaignsPage() {
     } catch { alert("绑定失败"); }
   };
 
-  const totalWeight = wheelItems.filter(w => w.enabled).reduce((s, w) => s + w.weight, 0);
+  // Probability calc: each item's weight is treated as percentage, remainder = no prize
+  const totalPct = wheelItems.filter(w => w.enabled).reduce((s, w) => s + w.weight, 0);
+  const noPrizePct = Math.max(0, 100 - totalPct);
 
   const statusBadge = (s: string) => {
     const m: Record<string, [string, string]> = {
@@ -197,7 +196,6 @@ export default function CampaignsPage() {
         </button>
       </div>
 
-      {/* Campaign List */}
       <div className="grid gap-4">
         {loading ? <p className="text-center text-on-surface-variant py-8">加载中...</p> :
          campaigns.length === 0 ? <p className="text-center text-on-surface-variant py-8">暂无活动，点击右上角创建</p> :
@@ -213,11 +211,6 @@ export default function CampaignsPage() {
                 <p className="text-xs text-outline">
                   {c.start_time ? new Date(c.start_time).toLocaleDateString() : "未设置"} ~ {c.end_time ? new Date(c.end_time).toLocaleDateString() : "未设置"}
                 </p>
-                {c.prize_url && (
-                  <p className="text-xs text-primary mt-1 flex items-center gap-1">
-                    <ExternalLink className="w-3 h-3" /> {c.prize_url}
-                  </p>
-                )}
               </div>
               <div className="flex items-center gap-1">
                 <button onClick={() => openWheel(c)} title="转盘配置"
@@ -246,7 +239,7 @@ export default function CampaignsPage() {
         ))}
       </div>
 
-      {/* Create/Edit Campaign Modal */}
+      {/* Create/Edit Campaign Modal — no prize_url field */}
       {(modal === "create" || modal === "edit") && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-inverse-surface/40 backdrop-blur-sm overflow-auto py-8">
           <div className="bg-surface-container-lowest rounded-2xl p-8 w-full max-w-lg shadow-2xl">
@@ -277,12 +270,6 @@ export default function CampaignsPage() {
                 </div>
               </div>
               <div>
-                <label className="text-sm font-bold text-on-surface-variant block mb-1">大奖默认跳转网址</label>
-                <input type="url" value={form.prize_url} onChange={e => setForm({...form, prize_url: e.target.value})}
-                  placeholder="https://example.com/claim"
-                  className="w-full bg-surface-container-low border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/40" />
-              </div>
-              <div>
                 <label className="text-sm font-bold text-on-surface-variant block mb-1">规则说明</label>
                 <textarea value={form.rules_text} onChange={e => setForm({...form, rules_text: e.target.value})}
                   className="w-full bg-surface-container-low border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/40 h-16" />
@@ -300,7 +287,7 @@ export default function CampaignsPage() {
         </div>
       )}
 
-      {/* Wheel Items Modal */}
+      {/* Wheel Items Modal — percentage based */}
       {modal === "wheel" && selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-inverse-surface/40 backdrop-blur-sm overflow-auto py-8">
           <div className="bg-surface-container-lowest rounded-2xl p-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-auto">
@@ -311,28 +298,66 @@ export default function CampaignsPage() {
               <button onClick={() => setModal(null)} className="text-outline hover:text-on-surface text-2xl">&times;</button>
             </div>
 
+            {/* Probability summary */}
+            <div className="mb-4 p-4 bg-surface-container-low rounded-xl">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-bold text-on-surface-variant">概率分配</span>
+                <span className={`text-sm font-bold ${totalPct > 100 ? "text-error" : "text-on-surface"}`}>
+                  已分配 {totalPct}% / 100%
+                </span>
+              </div>
+              <div className="h-3 w-full bg-surface-variant rounded-full overflow-hidden flex">
+                {wheelItems.filter(w => w.enabled).map((w, i) => (
+                  <div key={w.id} className="h-full" style={{
+                    width: `${w.weight}%`,
+                    backgroundColor: ["#0253cd", "#ffc69a", "#0048b5", "#8c4a00", "#789dff", "#ffb375"][i % 6],
+                  }} />
+                ))}
+                {noPrizePct > 0 && (
+                  <div className="h-full bg-gray-300" style={{ width: `${noPrizePct}%` }} />
+                )}
+              </div>
+              <div className="flex items-center gap-4 mt-2 text-xs text-on-surface-variant flex-wrap">
+                {wheelItems.filter(w => w.enabled).map((w, i) => (
+                  <span key={w.id} className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full" style={{
+                      backgroundColor: ["#0253cd", "#ffc69a", "#0048b5", "#8c4a00", "#789dff", "#ffb375"][i % 6],
+                    }} />
+                    {w.display_name} {w.weight}%
+                  </span>
+                ))}
+                {noPrizePct > 0 && (
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-gray-300" />
+                    未中奖 {noPrizePct}%
+                  </span>
+                )}
+              </div>
+              {totalPct > 100 && (
+                <p className="text-error text-xs font-bold mt-2">总概率超过100%，请调整！</p>
+              )}
+            </div>
+
             {/* Existing items */}
             {wheelItems.length > 0 && (
               <div className="mb-6">
-                <h3 className="text-sm font-bold text-on-surface-variant uppercase tracking-wider mb-3">
-                  当前奖项 ({wheelItems.length}个, 总权重: {totalWeight})
-                </h3>
+                <h3 className="text-sm font-bold text-on-surface-variant uppercase tracking-wider mb-3">当前奖项</h3>
                 <div className="space-y-2">
                   {wheelItems.map(w => (
                     <div key={w.id} className={`flex items-center justify-between p-3 rounded-xl ${w.enabled ? "bg-surface-container-low" : "bg-surface-container-low/50 opacity-60"}`}>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${w.type === "website" ? "bg-primary/10 text-primary" : "bg-secondary-container text-on-secondary-container"}`}>
-                          {w.type === "website" ? "网站奖" : "现场奖"}
+                          {w.type === "website" ? "跳转奖" : "现场奖"}
                         </span>
                         <span className="font-semibold text-sm">{w.display_name}</span>
-                        <span className="text-xs text-outline">权重: {w.weight} ({totalWeight > 0 ? (w.weight / totalWeight * 100).toFixed(1) : 0}%)</span>
+                        <span className="text-xs text-outline font-bold">{w.weight}%</span>
                         {w.type === "website" && w.redirect_url && (
-                          <span className="text-xs text-primary flex items-center gap-1"><ExternalLink className="w-3 h-3" />{w.redirect_url.slice(0, 30)}...</span>
+                          <span className="text-xs text-primary flex items-center gap-1"><ExternalLink className="w-3 h-3" />{w.redirect_url.slice(0, 30)}{w.redirect_url.length > 30 ? "..." : ""}</span>
                         )}
                       </div>
                       <div className="flex items-center gap-1">
-                        <button onClick={() => toggleWheel(w)} className={`p-1.5 rounded-lg text-xs ${w.enabled ? "text-green-600 hover:bg-green-50" : "text-outline hover:bg-surface-container"}`}>
-                          {w.enabled ? <Eye className="w-4 h-4" /> : <Eye className="w-4 h-4 opacity-40" />}
+                        <button onClick={() => toggleWheel(w)} className={`p-1.5 rounded-lg ${w.enabled ? "text-green-600 hover:bg-green-50" : "text-outline hover:bg-surface-container"}`}>
+                          <Eye className="w-4 h-4" />
                         </button>
                         <button onClick={() => editWheel(w)} className="p-1.5 rounded-lg text-primary hover:bg-primary/10">
                           <Pencil className="w-4 h-4" />
@@ -371,12 +396,12 @@ export default function CampaignsPage() {
                     <select value={wheelForm.type} onChange={e => setWheelForm({...wheelForm, type: e.target.value as "onsite" | "website"})}
                       className="w-full bg-surface-container-low border-none rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-primary/40">
                       <option value="onsite">现场奖</option>
-                      <option value="website">网站奖(跳转)</option>
+                      <option value="website">跳转网页奖</option>
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-outline block mb-1">权重(概率)</label>
-                    <input type="number" min={1} value={wheelForm.weight} onChange={e => setWheelForm({...wheelForm, weight: parseInt(e.target.value) || 1})}
+                    <label className="text-xs font-bold text-outline block mb-1">中奖概率(%)</label>
+                    <input type="number" min={1} max={100} value={wheelForm.weight} onChange={e => setWheelForm({...wheelForm, weight: parseInt(e.target.value) || 1})}
                       className="w-full bg-surface-container-low border-none rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-primary/40" />
                   </div>
                   <div>
@@ -399,7 +424,7 @@ export default function CampaignsPage() {
                 </div>
                 <div className="flex gap-3 pt-2">
                   {editingWheel && (
-                    <button type="button" onClick={() => { setEditingWheel(null); setWheelForm({ name: "", display_name: "", type: "onsite", weight: 10, sort_order: 0, redirect_url: "", display_text: "", enabled: true }); }}
+                    <button type="button" onClick={() => { setEditingWheel(null); resetWheelForm(); }}
                       className="px-4 py-2 rounded-full border border-outline-variant text-on-surface-variant font-bold text-sm">取消编辑</button>
                   )}
                   <button type="submit"

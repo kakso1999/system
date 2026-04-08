@@ -13,7 +13,7 @@ interface WheelItemData {
 
 interface SpinResult {
   result_index: number;
-  wheel_item: { id: string; display_name: string; type: string; display_text: string };
+  wheel_item: { id: string; display_name: string; type: string; display_text: string; redirect_url?: string };
 }
 
 const COLORS = [
@@ -283,14 +283,30 @@ export default function WheelPage() {
         {/* Result + Verification */}
         {showResult && result && (
           <div className="space-y-6">
-            {/* Prize Result */}
-            <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm text-center">
-              <PartyPopper className="w-12 h-12 text-secondary mb-3 mx-auto block" />
-              <h3 className="font-[var(--font-headline)] font-extrabold text-2xl text-on-surface mb-2">
-                You won: {result.wheel_item.display_name}!
-              </h3>
-              <p className="text-on-surface-variant text-sm">{result.wheel_item.display_text || "Complete verification to claim your prize"}</p>
-            </div>
+            {/* Prize Result or No Prize */}
+            {result.wheel_item.type === "none" ? (
+              <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm text-center">
+                <AlertCircle className="w-12 h-12 text-outline mb-3 mx-auto block" />
+                <h3 className="font-[var(--font-headline)] font-extrabold text-2xl text-on-surface mb-2">
+                  No Prize This Time
+                </h3>
+                <p className="text-on-surface-variant text-sm">{result.wheel_item.display_text}</p>
+              </div>
+            ) : (
+              <>
+                <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm text-center">
+                  <PartyPopper className="w-12 h-12 text-secondary mb-3 mx-auto block" />
+                  <h3 className="font-[var(--font-headline)] font-extrabold text-2xl text-on-surface mb-2">
+                    You won: {result.wheel_item.display_name}!
+                  </h3>
+                  <p className="text-on-surface-variant text-sm">{result.wheel_item.display_text || "Complete verification to claim your prize"}</p>
+                  {result.wheel_item.type === "website" && result.wheel_item.redirect_url && (
+                    <a href={result.wheel_item.redirect_url} target="_blank" rel="noopener noreferrer"
+                      className="inline-block mt-4 bg-primary text-white px-6 py-3 rounded-full font-bold text-sm shadow-md shadow-primary/20 hover:shadow-lg transition-all">
+                      Go to Prize Website
+                    </a>
+                  )}
+                </div>
 
             {/* Phone Verification */}
             {!claimResult && (
@@ -392,6 +408,8 @@ export default function WheelPage() {
                   </a>
                 )}
               </div>
+            )}
+              </>
             )}
           </div>
         )}

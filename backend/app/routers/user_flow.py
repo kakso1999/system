@@ -70,14 +70,30 @@ async def spin(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
     ).sort("sort_order", 1).to_list(length=50)
     if not items:
         raise HTTPException(status_code=400, detail="No wheel items")
-    weights = [i.get("weight", 10) for i in items]
-    chosen = random.choices(range(len(items)), weights=weights, k=1)[0]
+    # Each item's weight = percentage chance. Remainder = no prize.
+    total_pct = sum(i.get("weight", 10) for i in items)
+    no_prize_pct = max(0, 100 - total_pct)
+    # Build choices: real items + "no_prize" slot
+    all_weights = [i.get("weight", 10) for i in items]
+    if no_prize_pct > 0:
+        all_weights.append(no_prize_pct)
+    chosen = random.choices(range(len(all_weights)), weights=all_weights, k=1)[0]
+    if chosen >= len(items):
+        # No prize
+        return {
+            "result_index": -1,
+            "wheel_item": {
+                "id": "", "display_name": "No Prize",
+                "type": "none", "display_text": "Sorry, better luck next time!",
+            },
+        }
     item = items[chosen]
     return {
         "result_index": chosen,
         "wheel_item": {
             "id": str(item["_id"]), "display_name": item["display_name"],
             "type": item["type"], "display_text": item.get("display_text", ""),
+            "redirect_url": item.get("redirect_url", ""),
         },
     }
 
