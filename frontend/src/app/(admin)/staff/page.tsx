@@ -22,7 +22,7 @@ export default function StaffManagementPage() {
       const params: Record<string, string | number> = { page, page_size: 20 };
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
-      const res = await api.get<PageResponse<Staff>>("/api/admin/staff", { params });
+      const res = await api.get<PageResponse<Staff>>("/api/admin/staff/", { params });
       setStaffList(res.data.items);
       setTotal(res.data.total);
     } catch {
@@ -42,7 +42,7 @@ export default function StaffManagementPage() {
           name: form.name, phone: form.phone,
         });
       } else {
-        await api.post("/api/admin/staff", form);
+        await api.post("/api/admin/staff/", form);
       }
       setShowModal(false);
       setEditingStaff(null);

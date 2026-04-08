@@ -1,6 +1,6 @@
 import math
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -114,7 +114,7 @@ async def verify_phone(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)
         code = f"{random.randint(100000, 999999)}"
         await db.otp_records.insert_one({
             "phone": payload["phone"], "code": code, "used": False,
-            "expires_at": datetime(2099, 1, 1, tzinfo=timezone.utc),
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
             "created_at": datetime.now(timezone.utc),
         })
         return {"verified": False, "message": "OTP sent"}
@@ -123,12 +123,13 @@ async def verify_phone(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)
 
 @router.post("/verify-otp")
 async def verify_otp(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
+    now = datetime.now(timezone.utc)
     record = await db.otp_records.find_one(
-        {"phone": payload["phone"], "used": False},
+        {"phone": payload["phone"], "used": False, "expires_at": {"$gt": now}},
         sort=[("created_at", -1)],
     )
     if not record or record["code"] != payload["code"]:
-        return {"verified": False, "message": "Invalid OTP"}
+        return {"verified": False, "message": "Invalid or expired OTP"}
     await db.otp_records.update_one({"_id": record["_id"]}, {"$set": {"used": True}})
     return {"verified": True, "message": "Verified"}
 

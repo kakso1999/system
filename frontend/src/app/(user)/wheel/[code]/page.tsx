@@ -175,7 +175,7 @@ export default function WheelPage() {
 
       let start: number | null = null;
       const duration = 5000;
-      const startRotation = rotation;
+      const startRotation = rotation % 360;
 
       const animate = (timestamp: number) => {
         if (!start) start = timestamp;

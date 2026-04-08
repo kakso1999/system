@@ -6,6 +6,7 @@ import api from "@/lib/api";
 import type { Campaign, PageResponse, WheelItem, Staff } from "@/types";
 
 type ModalMode = "create" | "edit" | "wheel" | "staff" | null;
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -96,8 +97,10 @@ export default function CampaignsPage() {
 
   const toggleStatus = async (c: Campaign) => {
     const newStatus = c.status === "active" ? "paused" : "active";
-    await api.put(`/api/admin/campaigns/${c.id}/status`, { status: newStatus });
-    loadCampaigns();
+    try {
+      await api.put(`/api/admin/campaigns/${c.id}/status`, { status: newStatus });
+      loadCampaigns();
+    } catch { alert("操作失败"); }
   };
 
   const deleteCampaign = async (c: Campaign) => {
@@ -140,19 +143,23 @@ export default function CampaignsPage() {
   };
 
   const deleteWheel = async (w: WheelItem) => {
-    await api.delete(`/api/admin/wheel-items/${w.id}`);
-    if (selected) {
-      const res = await api.get<WheelItem[]>("/api/admin/wheel-items/", { params: { campaign_id: selected.id } });
-      setWheelItems(res.data);
-    }
+    try {
+      await api.delete(`/api/admin/wheel-items/${w.id}`);
+      if (selected) {
+        const res = await api.get<WheelItem[]>("/api/admin/wheel-items/", { params: { campaign_id: selected.id } });
+        setWheelItems(res.data);
+      }
+    } catch { alert("删除失败"); }
   };
 
   const toggleWheel = async (w: WheelItem) => {
-    await api.put(`/api/admin/wheel-items/${w.id}/toggle`);
-    if (selected) {
-      const res = await api.get<WheelItem[]>("/api/admin/wheel-items/", { params: { campaign_id: selected.id } });
-      setWheelItems(res.data);
-    }
+    try {
+      await api.put(`/api/admin/wheel-items/${w.id}/toggle`);
+      if (selected) {
+        const res = await api.get<WheelItem[]>("/api/admin/wheel-items/", { params: { campaign_id: selected.id } });
+        setWheelItems(res.data);
+      }
+    } catch { alert("操作失败"); }
   };
 
   const uploadImage = async (w: WheelItem) => {
@@ -369,7 +376,7 @@ export default function CampaignsPage() {
                     <div key={w.id} className={`flex items-center justify-between p-3 rounded-xl ${w.enabled ? "bg-surface-container-low" : "bg-surface-container-low/50 opacity-60"}`}>
                       <div className="flex items-center gap-3 flex-wrap">
                         {w.image_url ? (
-                          <img src={`http://localhost:8000${w.image_url}`} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                          <img src={`${API_BASE}${w.image_url}`} alt="" className="w-10 h-10 rounded-lg object-cover" />
                         ) : (
                           <div className="w-10 h-10 rounded-lg bg-surface-variant flex items-center justify-center">
                             <Gift className="w-5 h-5 text-outline" />

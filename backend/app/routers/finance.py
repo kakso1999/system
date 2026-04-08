@@ -66,6 +66,16 @@ async def manual_settle(
     if not staff:
         raise HTTPException(status_code=404, detail="Staff not found")
 
+    # Validate: check total approved amount
+    total_approved_pipeline = [
+        {"$match": {"beneficiary_staff_id": staff_id, "status": "approved"}},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
+    ]
+    agg = await db.commission_logs.aggregate(total_approved_pipeline).to_list(length=1)
+    total_approved = agg[0]["total"] if agg else 0
+    if amount > total_approved:
+        raise HTTPException(status_code=400, detail=f"Settlement amount {amount} exceeds approved balance {total_approved}")
+
     remaining = amount
     cursor = db.commission_logs.find(
         {"beneficiary_staff_id": staff_id, "status": "approved"}
@@ -75,6 +85,8 @@ async def manual_settle(
     async for log in cursor:
         if remaining <= 0:
             break
+        if log["amount"] > remaining:
+            break  # Don't partially settle a single record
         await db.commission_logs.update_one(
             {"_id": log["_id"]},
             {"$set": {"status": "paid", "paid_at": now, "settled_by": admin.get("username", "admin")}},

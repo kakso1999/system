@@ -17,5 +17,5 @@ async def get_settings(group: str | None = None, db: AsyncIOMotorDatabase = Depe
 
 @router.put("/{key}")
 async def update_setting(key: str, payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
-    await db.system_settings.update_one({"key": key}, {"$set": {"value": payload["value"]}})
+    await db.system_settings.update_one({"key": key}, {"$set": {"value": payload["value"]}}, upsert=True)
     return MessageResponse(message="Setting updated")

@@ -20,6 +20,7 @@ async def update_risk_setting(payload: dict, db: AsyncIOMotorDatabase = Depends(
     await db.system_settings.update_one(
         {"key": payload["key"]},
         {"$set": {"value": payload["value"]}},
+        upsert=True,
     )
     return MessageResponse(message="Setting updated")
 

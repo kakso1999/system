@@ -18,7 +18,7 @@ async def home(
     staff = current_staff
     sid = staff["_id"]
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    today_scans = await db.claims.count_documents({"staff_id": sid, "created_at": {"$gte": today_start}})
+    today_scans = await db.scan_logs.count_documents({"staff_id": sid, "created_at": {"$gte": today_start}})
     today_valid = await db.claims.count_documents({"staff_id": sid, "status": "success", "created_at": {"$gte": today_start}})
 
     pipeline = [

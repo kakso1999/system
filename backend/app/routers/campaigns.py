@@ -116,14 +116,22 @@ async def bind_staff_to_campaign(
 ) -> MessageResponse:
     campaign = await get_campaign_or_404(db, campaign_id)
     staff_ids = payload.get("staff_ids", [])
-    if not staff_ids:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No staff IDs provided")
+    now = datetime.now(timezone.utc)
     oids = [ObjectId(sid) for sid in staff_ids if ObjectId.is_valid(sid)]
-    result = await db.staff_users.update_many(
-        {"_id": {"$in": oids}},
-        {"$set": {"campaign_id": campaign["_id"], "updated_at": datetime.now(timezone.utc)}},
+    # Step 1: unbind all staff currently in this campaign
+    await db.staff_users.update_many(
+        {"campaign_id": campaign["_id"]},
+        {"$set": {"campaign_id": None, "updated_at": now}},
     )
-    return MessageResponse(message=f"Bound {result.modified_count} staff to campaign")
+    # Step 2: bind selected staff
+    bound = 0
+    if oids:
+        result = await db.staff_users.update_many(
+            {"_id": {"$in": oids}},
+            {"$set": {"campaign_id": campaign["_id"], "updated_at": now}},
+        )
+        bound = result.modified_count
+    return MessageResponse(message=f"Bound {bound} staff to campaign")
 
 
 @router.get("/{campaign_id}/staff")
@@ -133,7 +141,7 @@ async def list_campaign_staff(
 ):
     cid = parse_object_id(campaign_id, "campaign_id")
     staff = await db.staff_users.find(
-        {"campaign_id": cid}, {"password_hash": 0}
+        {"campaign_id": cid, "status": "active"}, {"password_hash": 0}
     ).to_list(length=500)
     return to_str_ids(staff)
 
