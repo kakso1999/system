@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Admin Login | GroundRewards</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Manrope:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-dim": "#ced1ff",
+                        "on-primary-fixed": "#000000",
+                        "on-primary-fixed-variant": "#00276b",
+                        "secondary-container": "#ffc69a",
+                        "surface": "#f8f5ff",
+                        "secondary-dim": "#7b4000",
+                        "on-surface": "#272c51",
+                        "primary-dim": "#0048b5",
+                        "outline-variant": "#a6aad7",
+                        "inverse-on-surface": "#969ac6",
+                        "on-primary-container": "#001f57",
+                        "secondary-fixed": "#ffc69a",
+                        "on-primary": "#f1f2ff",
+                        "tertiary-fixed": "#f395ee",
+                        "outline": "#6f749e",
+                        "secondary-fixed-dim": "#ffb375",
+                        "surface-container-high": "#dfe0ff",
+                        "surface-container-lowest": "#ffffff",
+                        "on-background": "#272c51",
+                        "on-tertiary-fixed-variant": "#69186b",
+                        "on-secondary-fixed-variant": "#7c4100",
+                        "primary-fixed": "#789dff",
+                        "on-tertiary-fixed": "#3b003e",
+                        "surface-container": "#e6e6ff",
+                        "surface-container-low": "#f1efff",
+                        "inverse-surface": "#05092f",
+                        "error": "#b31b25",
+                        "background": "#f8f5ff",
+                        "surface-variant": "#d8daff",
+                        "inverse-primary": "#5c8bff",
+                        "on-error": "#ffefee",
+                        "error-dim": "#9f0519",
+                        "error-container": "#fb5151",
+                        "on-secondary-fixed": "#532a00",
+                        "primary-container": "#789dff",
+                        "on-tertiary-container": "#5e0b61",
+                        "on-secondary": "#fff0e7",
+                        "tertiary": "#8c3a8c",
+                        "on-error-container": "#570008",
+                        "on-surface-variant": "#545981",
+                        "secondary": "#8c4a00",
+                        "primary-fixed-dim": "#618eff",
+                        "tertiary-fixed-dim": "#e488df",
+                        "surface-container-highest": "#d8daff",
+                        "surface-bright": "#f8f5ff",
+                        "surface-tint": "#0253cd",
+                        "tertiary-dim": "#7f2d7f",
+                        "on-tertiary": "#ffeef9",
+                        "primary": "#0253cd",
+                        "tertiary-container": "#f395ee",
+                        "on-secondary-container": "#6f3a00"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Plus Jakarta Sans"],
+                        "body": ["Manrope"],
+                        "label": ["Manrope"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .kinetic-bg {
+            background-image: radial-gradient(circle at 2px 2px, #0253cd08 1px, transparent 0);
+            background-size: 40px 40px;
+        }
+    </style>
+</head>
+<body class="bg-background font-body text-on-surface min-h-screen flex flex-col selection:bg-primary-container selection:text-on-primary-container">
+<main class="flex-grow flex items-center justify-center p-6 kinetic-bg relative overflow-hidden">
+<div class="absolute -top-24 -left-24 w-96 h-96 bg-primary/5 rounded-full blur-3xl"></div>
+<div class="absolute -bottom-24 -right-24 w-96 h-96 bg-secondary/5 rounded-full blur-3xl"></div>
+<div class="w-full max-w-md relative z-10">
+<div class="text-center mb-10">
+<div class="inline-flex items-center justify-center w-16 h-16 bg-primary-container/30 rounded-2xl mb-6 backdrop-blur-sm">
+<span class="material-symbols-outlined text-primary text-4xl" data-icon="admin_panel_settings">admin_panel_settings</span>
+</div>
+<h1 class="font-headline font-extrabold text-4xl tracking-tighter text-primary mb-2">GroundRewards</h1>
+<p class="font-medium text-on-surface-variant tracking-wide">Administrator Portal</p>
+</div>
+<div class="bg-surface-container-lowest p-8 md:p-10 rounded-xl shadow-[0_20px_40px_rgba(39,44,81,0.06)] border border-outline-variant/10">
+<form class="space-y-6">
+<div class="space-y-2">
+<label class="font-label text-sm font-bold text-on-surface-variant px-1" for="username">Username</label>
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-outline group-focus-within:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="person">person</span>
+</div>
+<input class="w-full bg-surface-container-low border-none rounded-xl py-4 pl-12 pr-4 text-on-surface placeholder:text-outline/60 focus:ring-2 focus:ring-primary/40 focus:bg-surface-container transition-all" id="username" name="username" placeholder="Enter administrator ID" type="text"/>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between items-center px-1">
+<label class="font-label text-sm font-bold text-on-surface-variant" for="password">Password</label>
+<a class="text-xs font-bold text-primary hover:text-primary-dim transition-colors" href="#">Forgot Password?</a>
+</div>
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-outline group-focus-within:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="lock">lock</span>
+</div>
+<input class="w-full bg-surface-container-low border-none rounded-xl py-4 pl-12 pr-4 text-on-surface placeholder:text-outline/60 focus:ring-2 focus:ring-primary/40 focus:bg-surface-container transition-all" id="password" name="password" placeholder="••••••••••••" type="password"/>
+</div>
+</div>
+<div class="flex items-center space-x-2 px-1">
+<input class="w-4 h-4 rounded border-outline text-primary focus:ring-primary/20 bg-surface-container-low cursor-pointer" id="remember" type="checkbox"/>
+<label class="text-sm font-semibold text-on-surface-variant cursor-pointer select-none" for="remember">Remember this device</label>
+</div>
+<button class="w-full bg-gradient-to-r from-primary to-primary-dim text-on-primary font-headline font-bold py-4 rounded-full shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 active:scale-[0.98] transition-all flex items-center justify-center space-x-2" type="submit">
+<span>Login to Dashboard</span>
+<span class="material-symbols-outlined text-[20px]" data-icon="login">login</span>
+</button>
+</form>
+<div class="mt-8 pt-8 border-t border-surface-container-high flex flex-col items-center space-y-4">
+<p class="text-xs font-medium text-on-surface-variant/70 text-center">
+                        This is a secure system monitored for auditing purposes. Authorized access only.
+                    </p>
+<div class="flex items-center space-x-4">
+<a class="inline-flex items-center space-x-1 text-sm font-bold text-outline hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="support_agent">support_agent</span>
+<span>Contact Admin</span>
+</a>
+<span class="w-1 h-1 bg-outline-variant/40 rounded-full"></span>
+<a class="inline-flex items-center space-x-1 text-sm font-bold text-outline hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined text-[18px]" data-icon="policy">policy</span>
+<span>Security Policy</span>
+</a>
+</div>
+</div>
+</div>
+<div class="mt-12 opacity-30 flex justify-center grayscale select-none pointer-events-none">
+<div class="grid grid-cols-6 gap-4">
+<div class="w-12 h-12 bg-primary rounded-xl rotate-12"></div>
+<div class="w-12 h-12 bg-surface-container-high rounded-xl -rotate-6"></div>
+<div class="w-12 h-12 bg-secondary-container rounded-xl rotate-45"></div>
+<div class="w-12 h-12 bg-primary-dim rounded-xl -rotate-12"></div>
+<div class="w-12 h-12 bg-tertiary-fixed rounded-xl rotate-12"></div>
+<div class="w-12 h-12 bg-surface-variant rounded-xl -rotate-45"></div>
+</div>
+</div>
+</div>
+</main>
+<footer class="p-6 text-center">
+<p class="text-xs font-bold text-outline tracking-widest uppercase">
+            © 2024 GroundRewards Global • Version 4.2.1-SECURE
+        </p>
+</footer>
+</body></html>

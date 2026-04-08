@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GroundRewards Promoter Dashboard</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Icons -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-dim": "#ced1ff",
+                    "on-primary-fixed": "#000000",
+                    "on-primary-fixed-variant": "#00276b",
+                    "secondary-container": "#ffc69a",
+                    "surface": "#f8f5ff",
+                    "secondary-dim": "#7b4000",
+                    "on-surface": "#272c51",
+                    "primary-dim": "#0048b5",
+                    "outline-variant": "#a6aad7",
+                    "inverse-on-surface": "#969ac6",
+                    "on-primary-container": "#001f57",
+                    "secondary-fixed": "#ffc69a",
+                    "on-primary": "#f1f2ff",
+                    "tertiary-fixed": "#f395ee",
+                    "outline": "#6f749e",
+                    "secondary-fixed-dim": "#ffb375",
+                    "surface-container-high": "#dfe0ff",
+                    "surface-container-lowest": "#ffffff",
+                    "on-background": "#272c51",
+                    "on-tertiary-fixed-variant": "#69186b",
+                    "on-secondary-fixed-variant": "#7c4100",
+                    "primary-fixed": "#789dff",
+                    "on-tertiary-fixed": "#3b003e",
+                    "surface-container": "#e6e6ff",
+                    "surface-container-low": "#f1efff",
+                    "inverse-surface": "#05092f",
+                    "error": "#b31b25",
+                    "background": "#f8f5ff",
+                    "surface-variant": "#d8daff",
+                    "inverse-primary": "#5c8bff",
+                    "on-error": "#ffefee",
+                    "error-dim": "#9f0519",
+                    "error-container": "#fb5151",
+                    "on-secondary-fixed": "#532a00",
+                    "primary-container": "#789dff",
+                    "on-tertiary-container": "#5e0b61",
+                    "on-secondary": "#fff0e7",
+                    "tertiary": "#8c3a8c",
+                    "on-error-container": "#570008",
+                    "on-surface-variant": "#545981",
+                    "secondary": "#8c4a00",
+                    "primary-fixed-dim": "#618eff",
+                    "tertiary-fixed-dim": "#e488df",
+                    "surface-container-highest": "#d8daff",
+                    "surface-bright": "#f8f5ff",
+                    "surface-tint": "#0253cd",
+                    "tertiary-dim": "#7f2d7f",
+                    "on-tertiary": "#ffeef9",
+                    "primary": "#0253cd",
+                    "tertiary-container": "#f395ee",
+                    "on-secondary-container": "#6f3a00"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "1.5rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Plus Jakarta Sans"],
+                    "body": ["Manrope"],
+                    "label": ["Manrope"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        .glass-header {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface font-body text-on-surface antialiased mb-24">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
+<div class="flex justify-between items-center px-6 h-16 w-full max-w-7xl mx-auto">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="menu">menu</span>
+<h1 class="text-xl font-bold tracking-tighter text-blue-700 font-headline">GroundRewards</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-container">
+<img alt="User Profile" data-alt="Close-up professional headshot of a smiling young male promoter with short dark hair in a bright office setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCF_WEeofkCew8hYxpck4wFA-YViggo3HjcJBA5oC0AVfW7op3uhAC-9s_uwCuTTPePwwWKEXLbRfl8ADYuzj6RAW-eSFZQlEL3NaiKOdHTqtm3kU0fbRVD2b-lcn6TyupUX7uHAtA2NfjPh7pb_7-0DgezqiMUdSBYShnS2jjUkW60EQhO4DzvdOSLCGTt89VCH548PROpcUzlp72FERujAy-SQPac_zVMm1vRC9oAxV5GbVggkdRv44G5WXu6-TngO2dvmfMjE-0"/>
+</div>
+</div>
+</div>
+</header>
+<main class="pt-20 px-4 max-w-lg mx-auto space-y-6">
+<!-- Welcome Section -->
+<section class="mt-4">
+<p class="text-on-surface-variant font-semibold text-sm">Welcome back, Alex</p>
+<h2 class="text-3xl font-extrabold font-headline tracking-tight mt-1">My Performance</h2>
+</section>
+<!-- Metrics Bento Grid -->
+<section class="grid grid-cols-2 gap-4">
+<!-- Main Metric: Commission -->
+<div class="col-span-2 bg-surface-container-lowest p-6 rounded-xl flex flex-col justify-between h-40">
+<div class="flex justify-between items-start">
+<span class="text-on-surface-variant font-bold text-xs uppercase tracking-widest">Commission Earned</span>
+<div class="bg-secondary-container p-2 rounded-full">
+<span class="material-symbols-outlined text-on-secondary-container" data-icon="payments">payments</span>
+</div>
+</div>
+<div>
+<div class="text-4xl font-extrabold font-headline text-primary">$1,284.50</div>
+<div class="flex items-center text-xs font-bold text-secondary mt-1">
+<span class="material-symbols-outlined text-[14px] mr-1" data-icon="trending_up">trending_up</span>
+                        +12% from yesterday
+                    </div>
+</div>
+</div>
+<!-- Referrals -->
+<div class="bg-surface-container-low p-5 rounded-xl space-y-2">
+<span class="text-on-surface-variant font-bold text-[10px] uppercase tracking-wider">Total Referrals</span>
+<div class="text-2xl font-bold font-headline">142</div>
+<div class="h-1 w-full bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-primary w-3/4 rounded-full"></div>
+</div>
+</div>
+<!-- Today's Rewards -->
+<div class="bg-surface-container-low p-5 rounded-xl space-y-2">
+<span class="text-on-surface-variant font-bold text-[10px] uppercase tracking-wider">Today Rewards</span>
+<div class="text-2xl font-bold font-headline">8</div>
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full border-2 border-surface-container-low bg-surface-dim"></div>
+<div class="w-6 h-6 rounded-full border-2 border-surface-container-low bg-primary-container"></div>
+<div class="w-6 h-6 rounded-full border-2 border-surface-container-low bg-secondary-container"></div>
+</div>
+</div>
+</section>
+<!-- QR Code Action Card -->
+<section>
+<div class="bg-primary p-6 rounded-xl text-on-primary shadow-lg shadow-primary/20 flex items-center justify-between overflow-hidden relative">
+<!-- Background Decorative Shape -->
+<div class="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
+<div class="space-y-4 relative z-10">
+<div>
+<h3 class="text-xl font-bold font-headline">My QR Code</h3>
+<p class="text-sm opacity-80 mt-1">Scan to register a new lead</p>
+</div>
+<button class="bg-on-primary text-primary px-6 py-2 rounded-full font-bold text-sm hover:bg-white active:scale-95 transition-all">
+                        Open Scanner
+                    </button>
+</div>
+<div class="bg-white p-3 rounded-2xl relative z-10">
+<div class="w-20 h-20 flex items-center justify-center">
+<span class="material-symbols-outlined text-[64px] text-primary" data-icon="qr_code_2">qr_code_2</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Recent Updates / Commission Pulse -->
+<section class="space-y-4">
+<div class="flex justify-between items-center px-1">
+<h3 class="text-lg font-bold font-headline">Recent Rewards</h3>
+<span class="text-xs font-bold text-primary">View All</span>
+</div>
+<div class="space-y-3">
+<!-- Reward Item 1 -->
+<div class="flex items-center justify-between p-4 bg-surface-container-lowest rounded-xl">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-secondary-container/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary" data-icon="verified_user">verified_user</span>
+</div>
+<div>
+<p class="font-bold text-sm">Marcus Jenkins</p>
+<p class="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide">Subscription Confirmed</p>
+</div>
+</div>
+<div class="text-right">
+<p class="text-secondary font-extrabold font-headline">+$25.00</p>
+<p class="text-[10px] text-on-surface-variant">2 mins ago</p>
+</div>
+</div>
+<!-- Reward Item 2 -->
+<div class="flex items-center justify-between p-4 bg-surface-container-lowest rounded-xl">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-primary-container/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="group_add">group_add</span>
+</div>
+<div>
+<p class="font-bold text-sm">Sarah Ohara</p>
+<p class="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide">Direct Referral</p>
+</div>
+</div>
+<div class="text-right">
+<p class="text-secondary font-extrabold font-headline">+$12.50</p>
+<p class="text-[10px] text-on-surface-variant">45 mins ago</p>
+</div>
+</div>
+<!-- Team Update -->
+<div class="flex items-center justify-between p-4 bg-surface-container-lowest rounded-xl">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-surface-dim/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-outline" data-icon="military_tech">military_tech</span>
+</div>
+<div>
+<p class="font-bold text-sm">Team Alpha</p>
+<p class="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wide">Weekly Goal Reached</p>
+</div>
+</div>
+<div class="text-right">
+<div class="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-[10px] font-bold">BONUS PENDING</div>
+<p class="text-[10px] text-on-surface-variant">2h ago</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-end pb-4 px-4 bg-white/80 backdrop-blur-xl z-50 rounded-t-[2rem] shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
+<!-- Home -->
+<a class="flex flex-col items-center justify-center text-slate-400 py-3 active:scale-90 transition-all duration-300 ease-out hover:text-blue-600" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="text-[11px] font-manrope font-bold uppercase tracking-widest mt-1">Home</span>
+</a>
+<!-- Performance (Active) -->
+<a class="flex flex-col items-center justify-center bg-blue-600 text-white rounded-full w-14 h-14 -mt-6 shadow-lg shadow-blue-200 active:scale-90 transition-all duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="redeem">redeem</span>
+<span class="sr-only">Rewards</span>
+</a>
+<!-- Team -->
+<a class="flex flex-col items-center justify-center text-slate-400 py-3 active:scale-90 transition-all duration-300 ease-out hover:text-blue-600" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span class="text-[11px] font-manrope font-bold uppercase tracking-widest mt-1">Team</span>
+</a>
+<!-- Profile -->
+<a class="flex flex-col items-center justify-center text-slate-400 py-3 active:scale-90 transition-all duration-300 ease-out hover:text-blue-600" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="text-[11px] font-manrope font-bold uppercase tracking-widest mt-1">Profile</span>
+</a>
+</nav>
+</body></html>

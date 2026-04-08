@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;family=Manrope:wght@400;500;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-dim": "#ced1ff",
+                    "on-primary-fixed": "#000000",
+                    "on-primary-fixed-variant": "#00276b",
+                    "secondary-container": "#ffc69a",
+                    "surface": "#f8f5ff",
+                    "secondary-dim": "#7b4000",
+                    "on-surface": "#272c51",
+                    "primary-dim": "#0048b5",
+                    "outline-variant": "#a6aad7",
+                    "inverse-on-surface": "#969ac6",
+                    "on-primary-container": "#001f57",
+                    "secondary-fixed": "#ffc69a",
+                    "on-primary": "#f1f2ff",
+                    "tertiary-fixed": "#f395ee",
+                    "outline": "#6f749e",
+                    "secondary-fixed-dim": "#ffb375",
+                    "surface-container-high": "#dfe0ff",
+                    "surface-container-lowest": "#ffffff",
+                    "on-background": "#272c51",
+                    "on-tertiary-fixed-variant": "#69186b",
+                    "on-secondary-fixed-variant": "#7c4100",
+                    "primary-fixed": "#789dff",
+                    "on-tertiary-fixed": "#3b003e",
+                    "surface-container": "#e6e6ff",
+                    "surface-container-low": "#f1efff",
+                    "inverse-surface": "#05092f",
+                    "error": "#b31b25",
+                    "background": "#f8f5ff",
+                    "surface-variant": "#d8daff",
+                    "inverse-primary": "#5c8bff",
+                    "on-error": "#ffefee",
+                    "error-dim": "#9f0519",
+                    "error-container": "#fb5151",
+                    "on-secondary-fixed": "#532a00",
+                    "primary-container": "#789dff",
+                    "on-tertiary-container": "#5e0b61",
+                    "on-secondary": "#fff0e7",
+                    "tertiary": "#8c3a8c",
+                    "on-error-container": "#570008",
+                    "on-surface-variant": "#545981",
+                    "secondary": "#8c4a00",
+                    "primary-fixed-dim": "#618eff",
+                    "tertiary-fixed-dim": "#e488df",
+                    "surface-container-highest": "#d8daff",
+                    "surface-bright": "#f8f5ff",
+                    "surface-tint": "#0253cd",
+                    "tertiary-dim": "#7f2d7f",
+                    "on-tertiary": "#ffeef9",
+                    "primary": "#0253cd",
+                    "tertiary-container": "#f395ee",
+                    "on-secondary-container": "#6f3a00"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Plus Jakarta Sans"],
+                    "body": ["Manrope"],
+                    "label": ["Manrope"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .bg-glass {
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface font-body text-on-surface antialiased">
+<!-- Top Navigation Shell -->
+<header class="bg-white/70 dark:bg-slate-900/70 backdrop-blur-md shadow-sm dark:shadow-none fixed top-0 w-full z-50">
+<div class="flex justify-between items-center px-6 h-16 w-full max-w-7xl mx-auto">
+<button class="hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors scale-95 active:scale-90 transition-transform p-2 rounded-full">
+<span class="material-symbols-outlined text-primary" data-icon="arrow_back">arrow_back</span>
+</button>
+<h1 class="text-xl font-bold tracking-tighter text-blue-700 dark:text-blue-400 font-headline">GroundRewards</h1>
+<button class="hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors scale-95 active:scale-90 transition-transform p-2 rounded-full">
+<span class="material-symbols-outlined text-primary" data-icon="help">help</span>
+</button>
+</div>
+</header>
+<main class="pt-20 pb-32 px-6 max-w-md mx-auto min-h-screen">
+<!-- Editorial Headline -->
+<div class="text-center mb-8">
+<span class="inline-block px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-extrabold uppercase tracking-[0.2em] mb-4">
+                Exclusive Access
+            </span>
+<h2 class="text-4xl font-headline font-extrabold leading-tight tracking-tight text-on-surface">
+                Congratulations! <span class="text-primary block">Spin to get your reward</span>
+</h2>
+</div>
+<!-- Lucky Wheel Section (Bento Inspired Container) -->
+<div class="relative w-full aspect-square mb-12 flex items-center justify-center">
+<!-- Background Decorative Glow -->
+<div class="absolute inset-0 bg-primary/10 rounded-full blur-3xl"></div>
+<!-- The Lucky Wheel Visual -->
+<div class="relative z-10 w-full h-full max-w-[320px] max-h-[320px] rounded-full p-2 bg-surface-container-lowest shadow-[0px_20px_40px_rgba(39,44,81,0.06)] border-[12px] border-surface-container">
+<!-- Wheel Segments (Simulated with CSS Gradients) -->
+<div class="w-full h-full rounded-full overflow-hidden relative" style="background: conic-gradient(from 0deg, #0253cd 0deg 60deg, #ffc69a 60deg 120deg, #0048b5 120deg 180deg, #8c4a00 180deg 240deg, #789dff 240deg 300deg, #ffb375 300deg 360deg);">
+<!-- Central Hub -->
+<div class="absolute inset-0 flex items-center justify-center">
+<div class="w-16 h-16 rounded-full bg-white shadow-xl z-20 flex items-center justify-center">
+<div class="w-12 h-12 rounded-full bg-primary flex items-center justify-center shadow-inner">
+<span class="material-symbols-outlined text-white text-3xl" data-icon="stars" style="font-variation-settings: 'FILL' 1;">stars</span>
+</div>
+</div>
+</div>
+<!-- Labels on Segments -->
+<div class="absolute top-8 left-1/2 -translate-x-1/2 text-white font-bold font-headline text-xs transform -rotate-12">IPHONE</div>
+<div class="absolute top-1/2 right-4 -translate-y-1/2 text-on-secondary-container font-bold font-headline text-xs rotate-60">$500</div>
+<div class="absolute bottom-8 left-1/2 -translate-x-1/2 text-white font-bold font-headline text-xs rotate-180">CASH</div>
+<div class="absolute top-1/2 left-4 -translate-y-1/2 text-white font-bold font-headline text-xs -rotate-60">GIFT</div>
+</div>
+<!-- Indicator Needle -->
+<div class="absolute -top-4 left-1/2 -translate-x-1/2 z-30">
+<span class="material-symbols-outlined text-error text-5xl drop-shadow-md" data-icon="arrow_drop_down" style="font-variation-settings: 'FILL' 1;">arrow_drop_down</span>
+</div>
+</div>
+<!-- Kinetic Action Button (Pulse) -->
+<button class="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-gradient-to-r from-primary to-primary-dim text-white rounded-full px-10 py-5 shadow-2xl shadow-primary/40 font-headline font-bold text-lg active:scale-90 transition-all z-40 whitespace-nowrap">
+                SPIN NOW
+            </button>
+</div>
+<!-- Verification Canvas -->
+<div class="bg-surface-container-lowest rounded-xl p-8 shadow-[0px_20px_40px_rgba(39,44,81,0.06)] relative overflow-hidden">
+<!-- Decorative Subtle Texture -->
+<div class="absolute top-0 right-0 p-4 opacity-10">
+<span class="material-symbols-outlined text-8xl" data-icon="lock_open">lock_open</span>
+</div>
+<div class="relative z-10">
+<h3 class="font-headline font-bold text-xl mb-2 text-on-surface">Claim Your Prize</h3>
+<p class="text-on-surface-variant text-sm mb-6 leading-relaxed">Enter your mobile number to verify and securely link your reward to your profile.</p>
+<!-- Form Inputs -->
+<div class="space-y-4">
+<div>
+<label class="block text-xs font-bold text-outline uppercase tracking-widest mb-2 ml-1">Mobile Number</label>
+<div class="relative">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant font-bold">+1</span>
+<input class="w-full bg-surface-container-low border-none rounded-xl py-4 pl-12 pr-4 text-on-surface font-semibold focus:ring-2 focus:ring-primary/40 transition-all placeholder:text-outline/50" placeholder="000-000-0000" type="tel"/>
+</div>
+</div>
+<button class="w-full bg-surface-container-highest text-primary font-headline font-extrabold py-4 rounded-xl hover:bg-primary hover:text-white transition-all active:scale-[0.98]">
+                        SEND VERIFICATION CODE
+                    </button>
+<div class="pt-2">
+<label class="block text-xs font-bold text-outline uppercase tracking-widest mb-2 ml-1">OTP Code</label>
+<div class="grid grid-cols-4 gap-3">
+<input class="w-full bg-surface-container-low border-none rounded-xl py-4 text-center font-bold text-xl text-primary focus:ring-2 focus:ring-primary/40" maxlength="1" type="text"/>
+<input class="w-full bg-surface-container-low border-none rounded-xl py-4 text-center font-bold text-xl text-primary focus:ring-2 focus:ring-primary/40" maxlength="1" type="text"/>
+<input class="w-full bg-surface-container-low border-none rounded-xl py-4 text-center font-bold text-xl text-primary focus:ring-2 focus:ring-primary/40" maxlength="1" type="text"/>
+<input class="w-full bg-surface-container-low border-none rounded-xl py-4 text-center font-bold text-xl text-primary focus:ring-2 focus:ring-primary/40" maxlength="1" type="text"/>
+</div>
+</div>
+<button class="w-full bg-gradient-to-r from-secondary to-secondary-dim text-white font-headline font-extrabold py-5 rounded-full shadow-lg shadow-secondary/20 active:scale-[0.97] transition-all">
+                        VERIFY &amp; CLAIM REWARD
+                    </button>
+</div>
+<div class="mt-6 text-center">
+<p class="text-[11px] text-outline font-medium">By proceeding, you agree to our <a class="text-primary underline" href="#">Terms &amp; Conditions</a></p>
+</div>
+</div>
+</div>
+<!-- Recent Winners (Asymmetric Editorial Element) -->
+<div class="mt-12 overflow-hidden">
+<h4 class="font-headline font-bold text-sm text-on-surface-variant uppercase tracking-widest mb-4">Live Winners</h4>
+<div class="flex space-x-4 overflow-x-auto pb-4 no-scrollbar">
+<div class="flex-shrink-0 bg-surface-container-low rounded-full px-4 py-2 flex items-center space-x-2">
+<div class="w-6 h-6 rounded-full bg-surface-dim overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="close-up of a young professional man with a friendly smile, studio lighting, clean background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDk9xehJbIqSWC6nm56GZ-FkKioFmWglmxgla3ilKr2AupaAEbcBNfn6V8mU6ftWD7Nl0HCljguVJlKEowIBbrsjb2-Yyp0qTukupBCOXq3ES4hqw4p-lAS8BZQXX1BSO9ysCfJROrP8_VqXmvXFyrrOgZozQZQBz_ixSUydHtYnmlwEUkECNz_TZCl07n_GTrkAnY3zyMa65bMsHygaaXBWatfnGPkQOyTKBqJILYpTeY7wXEX1Zl-BR1lFNoePEQHenKJ4w1WLOg"/>
+</div>
+<span class="text-xs font-bold text-on-surface">Alex R. won $50</span>
+</div>
+<div class="flex-shrink-0 bg-surface-container-low rounded-full px-4 py-2 flex items-center space-x-2">
+<div class="w-6 h-6 rounded-full bg-surface-dim overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="portrait of a confident woman with curly hair, natural sunlight, warm aesthetic" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCRJrrAST_0f4729JGKeQ1kcNumJfd-LMwpXZSWGW6__y6CFiYkOB4fWZLWFgiXYD563Q9dnMUGzntdPFa-Bs0sPTYTQH3gPg-6vKpkv-qzhuxPX-ZfDIdQJ24PQlkhtOiFJaHBQT4SNo4f4iH_wSc1vNMC8hmx7icinKrKiRCD25WW_94nfgMaK0oZl9fQE_DT5rY3QlPH-UHFK8TTrA940z7NyD64QXv2c0F4GqlPyyabZZ-qYP1C-Yz4KxvdPiTfooxYimzA_cc"/>
+</div>
+<span class="text-xs font-bold text-on-surface">Maya J. won Pro Kit</span>
+</div>
+<div class="flex-shrink-0 bg-surface-container-low rounded-full px-4 py-2 flex items-center space-x-2">
+<div class="w-6 h-6 rounded-full bg-surface-dim overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="smiling man wearing glasses, urban casual style, soft focus city background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAXMjjA6Dug3hkyHUOT3DoyS44LNImapuDs5HWWAMXN5iGl3pCXG-fjIAG03TizAfL74xo-RwoaRgppf62QAD3yPuNMQ2ILoka0qZRoF-Zme1p05HDr-snVMFZVK22Vj3Q50iNeCxiTy5p8wu_z_dLVsHG2-qKFZWVgvOGkjPmU6ZKDNp5jD9SwipX-46PnRFbst6SLk9IUfTVWxP7YjV36XzTE-Km7xvlbmmcUsC0DpWjTIwUPDCKa7XPcjcltBp2QxgaMhyUaFiQ"/>
+</div>
+<span class="text-xs font-bold text-on-surface">Sam T. won $10</span>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Shell -->
+<nav class="bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl fixed bottom-0 left-0 w-full flex justify-around items-end pb-4 px-4 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] rounded-t-[2rem] z-50">
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 py-3 hover:text-blue-600 dark:hover:text-blue-400 active:scale-90 transition-all duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="text-[11px] font-manrope font-bold uppercase tracking-widest mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-blue-600 dark:bg-blue-500 text-white rounded-full w-14 h-14 -mt-6 shadow-lg shadow-blue-200 dark:shadow-blue-900/40 active:scale-90 transition-all duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="redeem">redeem</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 py-3 hover:text-blue-600 dark:hover:text-blue-400 active:scale-90 transition-all duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="qr_code_2">qr_code_2</span>
+<span class="text-[11px] font-manrope font-bold uppercase tracking-widest mt-1">Promote</span>
+</a>
+<a class="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 py-3 hover:text-blue-600 dark:hover:text-blue-400 active:scale-90 transition-all duration-300 ease-out" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="text-[11px] font-manrope font-bold uppercase tracking-widest mt-1">Profile</span>
+</a>
+</nav>
+</body></html>
