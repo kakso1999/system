@@ -108,6 +108,36 @@ async def update_campaign_status(
     return MessageResponse(message="Campaign status updated successfully")
 
 
+@router.post("/{campaign_id}/bind-staff", response_model=MessageResponse)
+async def bind_staff_to_campaign(
+    campaign_id: str,
+    payload: dict,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> MessageResponse:
+    campaign = await get_campaign_or_404(db, campaign_id)
+    staff_ids = payload.get("staff_ids", [])
+    if not staff_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No staff IDs provided")
+    oids = [ObjectId(sid) for sid in staff_ids if ObjectId.is_valid(sid)]
+    result = await db.staff_users.update_many(
+        {"_id": {"$in": oids}},
+        {"$set": {"campaign_id": campaign["_id"], "updated_at": datetime.now(timezone.utc)}},
+    )
+    return MessageResponse(message=f"Bound {result.modified_count} staff to campaign")
+
+
+@router.get("/{campaign_id}/staff")
+async def list_campaign_staff(
+    campaign_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    cid = parse_object_id(campaign_id, "campaign_id")
+    staff = await db.staff_users.find(
+        {"campaign_id": cid}, {"password_hash": 0}
+    ).to_list(length=500)
+    return to_str_ids(staff)
+
+
 @router.delete("/{campaign_id}", response_model=MessageResponse)
 async def delete_campaign(
     campaign_id: str,

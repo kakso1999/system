@@ -36,7 +36,11 @@ async def welcome(staff_code: str, db: AsyncIOMotorDatabase = Depends(get_db)):
     staff = await db.staff_users.find_one({"invite_code": staff_code.upper()})
     if not staff:
         raise HTTPException(status_code=404, detail="Promoter not found")
-    campaign = await db.campaigns.find_one({"_id": staff.get("campaign_id"), "status": "active"})
+    campaign = None
+    if staff.get("campaign_id"):
+        campaign = await db.campaigns.find_one({"_id": staff["campaign_id"], "status": "active"})
+    if not campaign:
+        campaign = await db.campaigns.find_one({"status": "active"})
     if not campaign:
         raise HTTPException(status_code=404, detail="No active campaign")
     items = await db.wheel_items.find(
