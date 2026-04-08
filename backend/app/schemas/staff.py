@@ -1,0 +1,92 @@
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict
+
+
+StaffStatus = Literal["active", "disabled", "pending_review"]
+
+
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str
+    password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    old_password: str
+    new_password: str
+
+
+class StaffRegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    phone: str
+    username: str
+    password: str
+    invite_code: str | None = None
+
+
+class StaffCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    phone: str
+    username: str
+    password: str
+    campaign_id: str | None = None
+    parent_id: str | None = None
+
+
+class StaffUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    phone: str | None = None
+    status: StaffStatus | None = None
+    campaign_id: str | None = None
+
+
+class StaffStatusUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: StaffStatus
+
+
+class StaffResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    new_password: str
+
+
+class StaffStats(BaseModel):
+    total_scans: int
+    total_valid: int
+    total_commission: float
+    team_size: int
+    level1_count: int
+    level2_count: int
+    level3_count: int
+
+
+class StaffListItem(BaseModel):
+    id: str
+    staff_no: str
+    name: str
+    phone: str
+    username: str
+    status: StaffStatus
+    vip_level: int
+    stats: StaffStats
+    created_at: datetime
+
+
+class StaffDetail(StaffListItem):
+    invite_code: str
+    parent_id: str | None = None
+    campaign_id: str | None = None
+    updated_at: datetime | None = None
