@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Menu, LogOut, Wallet, QrCode, Home, Users } from "lucide-react";
 import api from "@/lib/api";
 import { clearAuth } from "@/lib/auth";
 
@@ -45,11 +46,11 @@ export default function PromoterHomePage() {
       <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
         <div className="flex justify-between items-center px-6 h-16 max-w-7xl mx-auto">
           <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-primary">menu</span>
+            <Menu className="w-6 h-6 text-primary" />
             <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">GroundRewards</h1>
           </div>
           <button onClick={() => { clearAuth(); router.push("/staff-login"); }} className="p-2 rounded-full hover:bg-primary/5">
-            <span className="material-symbols-outlined text-outline">logout</span>
+            <LogOut className="w-6 h-6 text-outline" />
           </button>
         </div>
       </header>
@@ -66,7 +67,7 @@ export default function PromoterHomePage() {
             <div className="flex justify-between items-start">
               <span className="text-on-surface-variant font-bold text-xs uppercase tracking-widest">Commission Earned</span>
               <div className="bg-secondary-container p-2 rounded-full">
-                <span className="material-symbols-outlined text-on-secondary-container">payments</span>
+                <Wallet className="w-6 h-6 text-on-secondary-container" />
               </div>
             </div>
             <div>
@@ -114,7 +115,7 @@ export default function PromoterHomePage() {
             </div>
             <div className="bg-white p-3 rounded-2xl relative z-10">
               <div className="w-20 h-20 flex items-center justify-center">
-                <span className="material-symbols-outlined text-[64px] text-primary">qr_code_2</span>
+                <QrCode className="w-16 h-16 text-primary" />
               </div>
             </div>
           </div>
@@ -140,14 +141,14 @@ export default function PromoterHomePage() {
       {/* Bottom Nav */}
       <nav className="fixed bottom-0 left-0 w-full flex justify-around items-end pb-4 px-4 bg-white/80 backdrop-blur-xl z-50 rounded-t-[2rem] shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
         <a href="/home" className="flex flex-col items-center justify-center text-primary py-3">
-          <span className="material-symbols-outlined">home</span>
+          <Home className="w-6 h-6" />
           <span className="text-[11px] font-bold uppercase tracking-widest mt-1">Home</span>
         </a>
         <a href="/qrcode" className="flex flex-col items-center justify-center bg-primary text-white rounded-full w-14 h-14 -mt-6 shadow-lg shadow-primary/20">
-          <span className="material-symbols-outlined">qr_code_2</span>
+          <QrCode className="w-6 h-6" />
         </a>
         <a href="/team" className="flex flex-col items-center justify-center text-slate-400 py-3 hover:text-primary">
-          <span className="material-symbols-outlined">group</span>
+          <Users className="w-6 h-6" />
           <span className="text-[11px] font-bold uppercase tracking-widest mt-1">Team</span>
         </a>
       </nav>

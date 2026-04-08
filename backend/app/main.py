@@ -63,7 +63,7 @@ app.add_middleware(
 # Import and register routers
 from app.routers import admin_auth, staff_auth, campaigns, wheel, reward_codes
 from app.routers import staff, claims, user_flow, risk_control, settings as settings_router
-from app.routers import promoter, finance
+from app.routers import promoter, finance, dashboard
 
 app.include_router(admin_auth.router, prefix="/api/auth/admin", tags=["Admin Auth"])
 app.include_router(staff_auth.router, prefix="/api/auth/staff", tags=["Staff Auth"])
@@ -75,6 +75,7 @@ app.include_router(claims.router, prefix="/api/admin/claims", tags=["Claims Reco
 app.include_router(risk_control.router, prefix="/api/admin/risk-control", tags=["Risk Control"])
 app.include_router(settings_router.router, prefix="/api/admin/settings", tags=["System Settings"])
 app.include_router(finance.router, prefix="/api/admin/finance", tags=["Finance"])
+app.include_router(dashboard.router, prefix="/api/admin/dashboard", tags=["Dashboard"])
 app.include_router(user_flow.router, prefix="/api/claim", tags=["User Claim Flow"])
 app.include_router(promoter.router, prefix="/api/promoter", tags=["Promoter"])
 

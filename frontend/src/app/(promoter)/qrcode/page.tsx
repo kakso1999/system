@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowLeft, QrCode, Copy } from "lucide-react";
 import api from "@/lib/api";
 
 export default function QRCodePage() {
@@ -35,7 +36,7 @@ export default function QRCodePage() {
       <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
         <div className="flex justify-between items-center px-6 h-16 max-w-7xl mx-auto">
           <button onClick={() => router.back()} className="p-2 rounded-full hover:bg-primary/5">
-            <span className="material-symbols-outlined text-primary">arrow_back</span>
+            <ArrowLeft className="w-5 h-5 text-primary" />
           </button>
           <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">My QR Code</h1>
           <div className="w-10" />
@@ -52,7 +53,7 @@ export default function QRCodePage() {
           {/* QR Code display */}
           <div className="bg-white p-6 rounded-2xl inline-block mb-6 shadow-inner">
             <div className="w-48 h-48 flex items-center justify-center bg-primary/5 rounded-xl">
-              <span className="material-symbols-outlined text-primary" style={{ fontSize: "120px" }}>qr_code_2</span>
+              <QrCode className="w-24 h-24 text-primary" />
             </div>
           </div>
 
@@ -71,7 +72,7 @@ export default function QRCodePage() {
             <button onClick={copyLink}
               className="w-full bg-primary text-on-primary py-3 rounded-full font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-primary/20 hover:shadow-lg active:scale-[0.98] transition-all"
             >
-              <span className="material-symbols-outlined text-[18px]">content_copy</span>
+              <Copy className="w-[18px] h-[18px]" />
               Copy Promotion Link
             </button>
           </div>

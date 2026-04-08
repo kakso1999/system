@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { UserPlus, Pencil, Ban, CheckCircle } from "lucide-react";
 import api from "@/lib/api";
 import type { Staff, PageResponse } from "@/types";
 
@@ -108,7 +109,7 @@ export default function StaffManagementPage() {
         <button onClick={openCreate}
           className="bg-primary text-on-primary px-6 py-3 rounded-full font-bold text-sm flex items-center gap-2 shadow-lg shadow-primary/20 hover:shadow-xl active:scale-[0.98] transition-all"
         >
-          <span className="material-symbols-outlined text-[18px]">person_add</span>
+          <UserPlus className="w-4 h-4" />
           新增地推员
         </button>
       </div>
@@ -163,12 +164,12 @@ export default function StaffManagementPage() {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <button onClick={() => openEdit(s)} className="text-primary hover:bg-primary/10 p-1.5 rounded-lg transition-colors">
-                        <span className="material-symbols-outlined text-[18px]">edit</span>
+                        <Pencil className="w-4 h-4" />
                       </button>
                       <button onClick={() => toggleStatus(s)}
                         className={`${s.status === "active" ? "text-error hover:bg-error/10" : "text-green-600 hover:bg-green-50"} p-1.5 rounded-lg transition-colors`}
                       >
-                        <span className="material-symbols-outlined text-[18px]">{s.status === "active" ? "block" : "check_circle"}</span>
+                        {s.status === "active" ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
                       </button>
                     </div>
                   </td>

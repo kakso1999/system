@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { ArrowLeft, ChevronDown, PartyPopper, LockOpen, CheckCircle, AlertCircle } from "lucide-react";
 import api from "@/lib/api";
 
 interface WheelItemData {
@@ -239,7 +240,7 @@ export default function WheelPage() {
       <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
         <div className="flex justify-between items-center px-6 h-16 max-w-7xl mx-auto">
           <button onClick={() => router.back()} className="p-2 rounded-full hover:bg-primary/5">
-            <span className="material-symbols-outlined text-primary">arrow_back</span>
+            <ArrowLeft className="w-5 h-5 text-primary" />
           </button>
           <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">GroundRewards</h1>
           <div className="w-10" />
@@ -264,7 +265,7 @@ export default function WheelPage() {
             <canvas ref={canvasRef} width={280} height={280} className="w-full h-full rounded-full" />
             {/* Indicator */}
             <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-30">
-              <span className="material-symbols-outlined text-error text-5xl drop-shadow-md" style={{ fontVariationSettings: "'FILL' 1" }}>arrow_drop_down</span>
+              <ChevronDown className="w-12 h-12 text-error drop-shadow-md" />
             </div>
           </div>
 
@@ -284,7 +285,7 @@ export default function WheelPage() {
           <div className="space-y-6">
             {/* Prize Result */}
             <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm text-center">
-              <span className="material-symbols-outlined text-secondary text-5xl mb-3 block" style={{ fontVariationSettings: "'FILL' 1" }}>celebration</span>
+              <PartyPopper className="w-12 h-12 text-secondary mb-3 mx-auto block" />
               <h3 className="font-[var(--font-headline)] font-extrabold text-2xl text-on-surface mb-2">
                 You won: {result.wheel_item.display_name}!
               </h3>
@@ -295,7 +296,7 @@ export default function WheelPage() {
             {!claimResult && (
               <div className="bg-surface-container-lowest rounded-xl p-8 shadow-[0px_20px_40px_rgba(39,44,81,0.06)] relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-10">
-                  <span className="material-symbols-outlined text-8xl">lock_open</span>
+                  <LockOpen className="w-16 h-16 text-on-surface" />
                 </div>
                 <div className="relative z-10">
                   <h3 className="font-[var(--font-headline)] font-bold text-xl mb-2 text-on-surface">Claim Your Prize</h3>
@@ -369,10 +370,11 @@ export default function WheelPage() {
             {/* Claim Result */}
             {claimResult && (
               <div className={`rounded-xl p-6 text-center ${claimResult.success ? "bg-green-50" : "bg-red-50"}`}>
-                <span className={`material-symbols-outlined text-5xl mb-3 block ${claimResult.success ? "text-green-600" : "text-error"}`}
-                  style={{ fontVariationSettings: "'FILL' 1" }}>
-                  {claimResult.success ? "check_circle" : "error"}
-                </span>
+                {claimResult.success ? (
+                  <CheckCircle className="w-12 h-12 text-green-600 mb-3 mx-auto block" />
+                ) : (
+                  <AlertCircle className="w-12 h-12 text-error mb-3 mx-auto block" />
+                )}
                 <h3 className={`font-bold text-xl mb-2 ${claimResult.success ? "text-green-700" : "text-error"}`}>
                   {claimResult.success ? "Prize Claimed!" : "Claim Failed"}
                 </h3>

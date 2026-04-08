@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { AlertCircle, CheckCircle, XCircle, Gift, Star } from "lucide-react";
 import api from "@/lib/api";
 
 interface ClaimResult {
@@ -37,7 +38,7 @@ export default function ResultPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface p-6">
         <div className="text-center">
-          <span className="material-symbols-outlined text-error text-6xl mb-4 block">error</span>
+          <AlertCircle className="w-16 h-16 text-error mb-4 mx-auto block" />
           <p className="text-on-surface-variant">{error}</p>
         </div>
       </div>
@@ -61,10 +62,11 @@ export default function ResultPage() {
       <main className="pt-24 pb-12 px-6 max-w-md mx-auto">
         <div className="text-center mb-8">
           <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-6 ${isSuccess ? "bg-green-100" : "bg-red-100"}`}>
-            <span className={`material-symbols-outlined text-5xl ${isSuccess ? "text-green-600" : "text-error"}`}
-              style={{ fontVariationSettings: "'FILL' 1" }}>
-              {isSuccess ? "check_circle" : "cancel"}
-            </span>
+            {isSuccess ? (
+              <CheckCircle className="w-12 h-12 text-green-600" />
+            ) : (
+              <XCircle className="w-12 h-12 text-error" />
+            )}
           </div>
           <h2 className="text-3xl font-[var(--font-headline)] font-extrabold tracking-tight">
             {isSuccess ? "Congratulations!" : "Oops!"}
@@ -78,7 +80,7 @@ export default function ResultPage() {
           <div className="space-y-4">
             {data.prize_type === "onsite" && (
               <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm text-center">
-                <span className="material-symbols-outlined text-secondary text-4xl mb-3 block" style={{ fontVariationSettings: "'FILL' 1" }}>redeem</span>
+                <Gift className="w-10 h-10 text-secondary mb-3 mx-auto block" />
                 <h3 className="font-bold text-lg mb-2">On-Site Prize</h3>
                 <p className="text-on-surface-variant text-sm">Please show this screen to the promoter to collect your prize.</p>
                 <div className="mt-4 bg-green-50 p-4 rounded-xl">
@@ -89,7 +91,7 @@ export default function ResultPage() {
 
             {data.prize_type === "website" && (
               <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm text-center">
-                <span className="material-symbols-outlined text-primary text-4xl mb-3 block" style={{ fontVariationSettings: "'FILL' 1" }}>stars</span>
+                <Star className="w-10 h-10 text-primary mb-3 mx-auto block" />
                 <h3 className="font-bold text-lg mb-2">Grand Prize</h3>
                 <p className="text-on-surface-variant text-sm mb-4">Complete your claim at the partner website.</p>
 

@@ -18,10 +18,10 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
+      const role = Cookies.get("role");
       Cookies.remove("token");
       Cookies.remove("role");
-      const role = Cookies.get("role");
-      if (typeof window !== "undefined") {
+      if (typeof window !== "undefined" && !window.location.pathname.includes("login")) {
         window.location.href = role === "admin" ? "/admin-login" : "/staff-login";
       }
     }
