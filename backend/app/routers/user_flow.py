@@ -32,7 +32,7 @@ async def check_risk(db, phone, ip, device_fp, campaign_id) -> list[str]:
 
 
 @router.get("/welcome/{staff_code}")
-async def welcome(staff_code: str, db: AsyncIOMotorDatabase = Depends(get_db)):
+async def welcome(staff_code: str, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
     staff = await db.staff_users.find_one({"invite_code": staff_code.upper()})
     if not staff:
         raise HTTPException(status_code=404, detail="Promoter not found")
@@ -43,6 +43,16 @@ async def welcome(staff_code: str, db: AsyncIOMotorDatabase = Depends(get_db)):
         campaign = await db.campaigns.find_one({"status": "active"})
     if not campaign:
         raise HTTPException(status_code=404, detail="No active campaign")
+
+    # Record scan: increment staff total_scans and log it
+    await db.staff_users.update_one({"_id": staff["_id"]}, {"$inc": {"stats.total_scans": 1}})
+    await db.scan_logs.insert_one({
+        "staff_id": staff["_id"],
+        "campaign_id": campaign["_id"],
+        "ip": request.client.host if request.client else "",
+        "created_at": datetime.now(timezone.utc),
+    })
+
     items = await db.wheel_items.find(
         {"campaign_id": campaign["_id"], "enabled": True}
     ).sort("sort_order", 1).to_list(length=50)
@@ -178,7 +188,7 @@ async def complete(payload: dict, request: Request, db: AsyncIOMotorDatabase = D
     result = await db.claims.insert_one(claim)
     await db.staff_users.update_one(
         {"_id": staff["_id"]},
-        {"$inc": {"stats.total_scans": 1, "stats.total_valid": 1}},
+        {"$inc": {"stats.total_valid": 1}},
     )
     return {
         "success": True, "claim_id": str(result.inserted_id),

@@ -11,10 +11,10 @@ router = APIRouter(dependencies=[Depends(get_current_admin)])
 async def get_dashboard(db: AsyncIOMotorDatabase = Depends(get_db)):
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
-    today_scans = await db.claims.count_documents({"created_at": {"$gte": today_start}})
+    today_scans = await db.scan_logs.count_documents({"created_at": {"$gte": today_start}})
     today_valid = await db.claims.count_documents({"status": "success", "created_at": {"$gte": today_start}})
     today_staff = await db.staff_users.count_documents({"created_at": {"$gte": today_start}})
-    total_scans = await db.claims.count_documents({})
+    total_scans = await db.scan_logs.count_documents({})
     total_valid = await db.claims.count_documents({"status": "success"})
     total_staff = await db.staff_users.count_documents({})
 
