@@ -1,22 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { AlertCircle, Star, Gift } from "lucide-react";
+import { AlertCircle, ChevronRight, Gift, Star, Sparkles } from "lucide-react";
+import confetti from "canvas-confetti";
 import api from "@/lib/api";
-import type { WheelItem } from "@/types";
+
+interface WheelItemData {
+  id: string;
+  display_name: string;
+  type: "onsite" | "website";
+  weight: number;
+  image_url: string;
+}
 
 interface WelcomeData {
   staff_name: string;
-  campaign: {
-    id: string;
-    name: string;
-    description: string;
-    rules_text: string;
-    prize_url: string;
-  };
-  wheel_items: WheelItem[];
+  campaign: { id: string; name: string; description: string; rules_text: string; prize_url: string };
+  wheel_items: WheelItemData[];
 }
+
+type Step = "welcome" | "prizes" | "wheel";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function WelcomePage() {
   const params = useParams();
@@ -24,10 +30,24 @@ export default function WelcomePage() {
   const code = params.code as string;
   const [data, setData] = useState<WelcomeData | null>(null);
   const [error, setError] = useState("");
+  const [step, setStep] = useState<Step>("welcome");
+  const [activeSlide, setActiveSlide] = useState(0);
+  const confettiFired = useRef(false);
 
   useEffect(() => {
     if (code) loadWelcome();
   }, [code]);
+
+  // Fire confetti on welcome step
+  useEffect(() => {
+    if (step === "welcome" && data && !confettiFired.current) {
+      confettiFired.current = true;
+      setTimeout(() => {
+        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ["#0253cd", "#ffc69a", "#789dff", "#f395ee", "#ffb375"] });
+        setTimeout(() => confetti({ particleCount: 60, spread: 120, origin: { y: 0.5 } }), 300);
+      }, 400);
+    }
+  }, [step, data]);
 
   const loadWelcome = async () => {
     try {
@@ -42,7 +62,7 @@ export default function WelcomePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface p-6">
         <div className="text-center">
-          <AlertCircle className="w-16 h-16 text-error mb-4 mx-auto block" />
+          <AlertCircle className="w-16 h-16 text-error mb-4 mx-auto" />
           <h2 className="text-2xl font-bold font-[var(--font-headline)] text-on-surface mb-2">Oops!</h2>
           <p className="text-on-surface-variant">{error}</p>
         </div>
@@ -51,75 +71,148 @@ export default function WelcomePage() {
   }
 
   if (!data) {
+    return <div className="min-h-screen flex items-center justify-center bg-surface text-on-surface-variant font-semibold">Loading...</div>;
+  }
+
+  // Step 1: Welcome with confetti
+  if (step === "welcome") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface">
-        <div className="text-on-surface-variant font-semibold">Loading...</div>
+      <div className="min-h-screen bg-surface flex flex-col">
+        <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
+          <div className="flex justify-center items-center h-16">
+            <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">GroundRewards</h1>
+          </div>
+        </header>
+
+        <main className="flex-1 flex flex-col items-center justify-center px-6 pt-20 pb-12">
+          {/* Animated gift icon */}
+          <div className="relative mb-8">
+            <div className="w-32 h-32 bg-gradient-to-br from-primary to-primary-dim rounded-3xl flex items-center justify-center shadow-2xl shadow-primary/30 animate-bounce" style={{ animationDuration: "2s" }}>
+              <Gift className="w-16 h-16 text-white" />
+            </div>
+            <div className="absolute -top-3 -right-3 w-10 h-10 bg-secondary-container rounded-full flex items-center justify-center animate-pulse">
+              <Sparkles className="w-5 h-5 text-secondary" />
+            </div>
+          </div>
+
+          <span className="inline-block px-5 py-2 rounded-full bg-secondary-container text-on-secondary-container text-xs font-extrabold uppercase tracking-[0.25em] mb-6">
+            Exclusive Access
+          </span>
+
+          <h1 className="text-5xl font-[var(--font-headline)] font-extrabold tracking-tight text-on-surface mb-3 text-center">
+            Welcome!
+          </h1>
+
+          <h2 className="text-3xl font-[var(--font-headline)] font-extrabold text-primary mb-4 text-center">
+            {data.campaign.name}
+          </h2>
+
+          <p className="text-on-surface-variant text-center max-w-sm leading-relaxed mb-10">
+            {data.campaign.description || "You've been invited to an exclusive prize draw. Amazing rewards await!"}
+          </p>
+
+          <button
+            onClick={() => setStep("prizes")}
+            className="w-full max-w-sm bg-gradient-to-r from-primary to-primary-dim text-white rounded-full px-10 py-5 shadow-2xl shadow-primary/40 font-[var(--font-headline)] font-bold text-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            View Prizes <ChevronRight className="w-5 h-5" />
+          </button>
+
+          <p className="text-center text-[11px] text-outline mt-6">
+            By proceeding, you agree to our Terms & Conditions
+          </p>
+        </main>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-surface">
-      <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
-        <div className="flex justify-center items-center h-16">
-          <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">GroundRewards</h1>
-        </div>
-      </header>
+  // Step 2: Prize showcase with fan/carousel
+  if (step === "prizes") {
+    const items = data.wheel_items;
+    return (
+      <div className="min-h-screen bg-surface flex flex-col">
+        <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
+          <div className="flex justify-center items-center h-16">
+            <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">GroundRewards</h1>
+          </div>
+        </header>
 
-      <main className="pt-24 pb-12 px-6 max-w-md mx-auto">
-        <div className="text-center mb-8">
-          <span className="inline-block px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-extrabold uppercase tracking-[0.2em] mb-4">
-            Exclusive Access
-          </span>
-          <h2 className="text-3xl font-[var(--font-headline)] font-extrabold leading-tight tracking-tight text-on-surface">
-            Welcome! <span className="text-primary block">{data.campaign.name}</span>
+        <main className="flex-1 flex flex-col items-center px-6 pt-24 pb-12">
+          <h2 className="text-2xl font-[var(--font-headline)] font-extrabold tracking-tight text-on-surface mb-2">
+            Amazing Prizes
           </h2>
-          <p className="text-on-surface-variant mt-3 text-sm leading-relaxed">
-            {data.campaign.description}
-          </p>
-        </div>
+          <p className="text-on-surface-variant text-sm mb-8">Swipe to see what you could win</p>
 
-        {/* Prize Preview */}
-        <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm mb-8">
-          <h3 className="font-bold text-sm text-on-surface-variant uppercase tracking-wider mb-4">Available Prizes</h3>
-          <div className="space-y-3">
-            {data.wheel_items.map((item) => (
-              <div key={item.id} className="flex items-center gap-3 p-3 bg-surface-container-low rounded-xl">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                  item.type === "website" ? "bg-secondary-container/30" : "bg-primary-container/30"
-                }`}>
-                  {item.type === "website" ? (
-                    <Star className="w-5 h-5 text-secondary" />
-                  ) : (
-                    <Gift className="w-5 h-5 text-primary" />
-                  )}
+          {/* Fan card carousel */}
+          <div className="relative w-full max-w-sm h-80 mb-8">
+            {items.map((item, i) => {
+              const offset = i - activeSlide;
+              const isActive = offset === 0;
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => setActiveSlide(i)}
+                  className="absolute inset-0 transition-all duration-500 ease-out cursor-pointer"
+                  style={{
+                    transform: `translateX(${offset * 40}px) scale(${isActive ? 1 : 0.85}) rotateY(${offset * -8}deg)`,
+                    opacity: Math.abs(offset) > 2 ? 0 : 1 - Math.abs(offset) * 0.25,
+                    zIndex: 10 - Math.abs(offset),
+                  }}
+                >
+                  <div className={`w-full h-full rounded-3xl overflow-hidden shadow-2xl ${isActive ? "shadow-primary/30" : "shadow-black/10"} border-2 ${isActive ? "border-primary/20" : "border-white/50"}`}>
+                    {/* Prize image or gradient */}
+                    {item.image_url ? (
+                      <div className="w-full h-3/5 bg-surface-container-low">
+                        <img src={`${API_BASE}${item.image_url}`} alt={item.display_name}
+                          className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className={`w-full h-3/5 flex items-center justify-center ${
+                        item.type === "website"
+                          ? "bg-gradient-to-br from-primary to-primary-dim"
+                          : "bg-gradient-to-br from-secondary to-secondary-dim"
+                      }`}>
+                        {item.type === "website"
+                          ? <Star className="w-20 h-20 text-white/80" />
+                          : <Gift className="w-20 h-20 text-white/80" />}
+                      </div>
+                    )}
+                    {/* Prize info */}
+                    <div className="p-5 bg-white h-2/5 flex flex-col justify-center">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${
+                        item.type === "website" ? "text-primary" : "text-secondary"
+                      }`}>
+                        {item.type === "website" ? "Grand Prize" : "Instant Win"}
+                      </span>
+                      <h3 className="text-xl font-[var(--font-headline)] font-extrabold text-on-surface">
+                        {item.display_name}
+                      </h3>
+                      <p className="text-xs text-on-surface-variant mt-1">{item.weight}% chance</p>
+                    </div>
+                  </div>
                 </div>
-                <span className="font-bold text-sm">{item.display_name}</span>
-              </div>
+              );
+            })}
+          </div>
+
+          {/* Dots indicator */}
+          <div className="flex gap-2 mb-8">
+            {items.map((_, i) => (
+              <button key={i} onClick={() => setActiveSlide(i)}
+                className={`w-2.5 h-2.5 rounded-full transition-all ${i === activeSlide ? "bg-primary w-6" : "bg-outline-variant"}`} />
             ))}
           </div>
-        </div>
 
-        {/* Rules */}
-        {data.campaign.rules_text && (
-          <div className="text-xs text-on-surface-variant bg-surface-container-low rounded-xl p-4 mb-8">
-            <p className="font-bold uppercase tracking-wider mb-2">Rules</p>
-            <p className="leading-relaxed">{data.campaign.rules_text}</p>
-          </div>
-        )}
+          <button
+            onClick={() => router.push(`/wheel/${code}`)}
+            className="w-full max-w-sm bg-gradient-to-r from-primary to-primary-dim text-white rounded-full px-10 py-5 shadow-2xl shadow-primary/40 font-[var(--font-headline)] font-bold text-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            SPIN THE WHEEL <ChevronRight className="w-5 h-5" />
+          </button>
+        </main>
+      </div>
+    );
+  }
 
-        {/* Start Button */}
-        <button
-          onClick={() => router.push(`/wheel/${code}`)}
-          className="w-full bg-gradient-to-r from-primary to-primary-dim text-white rounded-full px-10 py-5 shadow-2xl shadow-primary/40 font-[var(--font-headline)] font-bold text-lg active:scale-90 transition-all"
-        >
-          SPIN THE WHEEL
-        </button>
-
-        <p className="text-center text-[11px] text-outline mt-4">
-          By proceeding, you agree to our Terms &amp; Conditions
-        </p>
-      </main>
-    </div>
-  );
+  return null;
 }

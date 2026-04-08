@@ -102,6 +102,7 @@ class WheelItemDetail(BaseModel):
     redirect_url: str = ""
     display_text: str = ""
     remark: str = ""
+    image_url: str = ""
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

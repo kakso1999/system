@@ -1,7 +1,9 @@
+import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo import ReturnDocument
 
@@ -12,6 +14,8 @@ from app.schemas.common import MessageResponse
 from app.utils.helpers import to_str_id
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
+
+UPLOAD_DIR = Path(__file__).parent.parent.parent / "uploads"
 
 
 def parse_object_id(value: str, field_name: str) -> ObjectId:
@@ -107,3 +111,24 @@ async def toggle_wheel_item(
         {"$set": {"enabled": not item.get("enabled", True), "updated_at": datetime.now(timezone.utc)}},
     )
     return MessageResponse(message="Wheel item toggled successfully")
+
+
+@router.post("/{item_id}/upload-image")
+async def upload_wheel_image(
+    item_id: str,
+    file: UploadFile = File(...),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    item = await get_wheel_item_or_404(db, item_id)
+    ext = file.filename.rsplit(".", 1)[-1] if file.filename else "png"
+    filename = f"wheel_{uuid.uuid4().hex[:8]}.{ext}"
+    filepath = UPLOAD_DIR / filename
+    UPLOAD_DIR.mkdir(exist_ok=True)
+    content = await file.read()
+    filepath.write_bytes(content)
+    image_url = f"/uploads/{filename}"
+    await db.wheel_items.update_one(
+        {"_id": item["_id"]},
+        {"$set": {"image_url": image_url, "updated_at": datetime.now(timezone.utc)}},
+    )
+    return {"image_url": image_url}

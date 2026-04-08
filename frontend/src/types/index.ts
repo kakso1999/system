@@ -46,6 +46,7 @@ export interface WheelItem {
   needs_reward_code: boolean;
   redirect_url: string;
   display_text: string;
+  image_url?: string;
 }
 
 export interface Claim {

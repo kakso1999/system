@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+from pathlib import Path
 from app.database import connect_db, close_db, get_db
 from app.config import get_settings
 from app.utils.security import hash_password
@@ -78,6 +80,11 @@ app.include_router(finance.router, prefix="/api/admin/finance", tags=["Finance"]
 app.include_router(dashboard.router, prefix="/api/admin/dashboard", tags=["Dashboard"])
 app.include_router(user_flow.router, prefix="/api/claim", tags=["User Claim Flow"])
 app.include_router(promoter.router, prefix="/api/promoter", tags=["Promoter"])
+
+# Static files for uploaded images
+upload_dir = Path(__file__).parent.parent / "uploads"
+upload_dir.mkdir(exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(upload_dir)), name="uploads")
 
 
 @app.get("/api/health")

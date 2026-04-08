@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Plus, Pencil, Trash2, Play, Pause, Eye, Users, Settings2, ExternalLink } from "lucide-react";
+import { Plus, Pencil, Trash2, Play, Pause, Eye, Users, Settings2, ExternalLink, Upload, Gift } from "lucide-react";
 import api from "@/lib/api";
 import type { Campaign, PageResponse, WheelItem, Staff } from "@/types";
 
@@ -153,6 +153,28 @@ export default function CampaignsPage() {
       const res = await api.get<WheelItem[]>("/api/admin/wheel-items/", { params: { campaign_id: selected.id } });
       setWheelItems(res.data);
     }
+  };
+
+  const uploadImage = async (w: WheelItem) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        await api.post(`/api/admin/wheel-items/${w.id}/upload-image`, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        if (selected) {
+          const res = await api.get<WheelItem[]>("/api/admin/wheel-items/", { params: { campaign_id: selected.id } });
+          setWheelItems(res.data);
+        }
+      } catch { alert("上传失败"); }
+    };
+    input.click();
   };
 
   const toggleStaffSelect = (id: string) => {
@@ -346,6 +368,13 @@ export default function CampaignsPage() {
                   {wheelItems.map(w => (
                     <div key={w.id} className={`flex items-center justify-between p-3 rounded-xl ${w.enabled ? "bg-surface-container-low" : "bg-surface-container-low/50 opacity-60"}`}>
                       <div className="flex items-center gap-3 flex-wrap">
+                        {w.image_url ? (
+                          <img src={`http://localhost:8000${w.image_url}`} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-surface-variant flex items-center justify-center">
+                            <Gift className="w-5 h-5 text-outline" />
+                          </div>
+                        )}
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${w.type === "website" ? "bg-primary/10 text-primary" : "bg-secondary-container text-on-secondary-container"}`}>
                           {w.type === "website" ? "跳转奖" : "现场奖"}
                         </span>
@@ -356,6 +385,9 @@ export default function CampaignsPage() {
                         )}
                       </div>
                       <div className="flex items-center gap-1">
+                        <button onClick={() => uploadImage(w)} className="p-1.5 rounded-lg text-outline hover:bg-surface-container" title="上传图片">
+                          <Upload className="w-4 h-4" />
+                        </button>
                         <button onClick={() => toggleWheel(w)} className={`p-1.5 rounded-lg ${w.enabled ? "text-green-600 hover:bg-green-50" : "text-outline hover:bg-surface-container"}`}>
                           <Eye className="w-4 h-4" />
                         </button>
