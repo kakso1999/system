@@ -62,7 +62,7 @@ async def create_indexes():
     await db.commission_logs.create_index(
         [("claim_id", 1), ("beneficiary_staff_id", 1)],
         unique=True,
-        partialFilterExpression={"type": {"$ne": "team_reward"}},
+        partialFilterExpression={"type": "direct"},
     )
     await db.commission_logs.create_index("created_at")
     # otp_records - TTL index
