@@ -5,6 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_db
 from app.dependencies import get_current_staff
+from app.schemas.common import PageResponse
+from app.services.withdrawals import (
+    create_withdrawal_request,
+    fetch_withdrawal_page,
+    get_payout_account_or_404,
+    get_withdrawal_balance_snapshot,
+)
 from app.utils.helpers import to_str_id, to_str_ids
 
 router = APIRouter()
@@ -230,6 +237,55 @@ async def set_default_payout_account(
     await db.staff_payout_accounts.update_one({"_id": oid}, {"$set": {"is_default": True, "updated_at": now}})
     updated = await db.staff_payout_accounts.find_one({"_id": oid})
     return to_str_id(updated)
+
+
+@router.post("/withdrawal-requests")
+async def create_withdrawal(
+    payload: dict,
+    current_staff: dict = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    try:
+        amount = float(payload.get("amount", 0))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid amount") from exc
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Withdrawal amount must be greater than 0")
+    payout_account_id = parse_object_id(payload.get("payout_account_id", ""), "Invalid payout account id")
+    balance = await get_withdrawal_balance_snapshot(db, current_staff["_id"])
+    if amount > max(balance["available"], 0):
+        raise HTTPException(status_code=400, detail="Withdrawal amount exceeds available balance")
+    payout_account = await get_payout_account_or_404(db, current_staff["_id"], payout_account_id)
+    return to_str_id(
+        await create_withdrawal_request(
+            db,
+            staff_id=current_staff["_id"],
+            amount=amount,
+            payout_account=payout_account,
+        )
+    )
+
+
+@router.get("/withdrawal-requests", response_model=PageResponse)
+async def list_withdrawals(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status: str | None = None,
+    current_staff: dict = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> PageResponse:
+    query: dict = {"staff_id": current_staff["_id"]}
+    if status:
+        query["status"] = status
+    return PageResponse(**await fetch_withdrawal_page(db, query=query, page=page, page_size=page_size, include_staff=False))
+
+
+@router.get("/withdrawal-balance")
+async def withdrawal_balance(
+    current_staff: dict = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    return await get_withdrawal_balance_snapshot(db, current_staff["_id"])
 
 
 @router.get("/vip-progress")

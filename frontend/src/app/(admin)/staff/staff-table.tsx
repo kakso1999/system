@@ -1,0 +1,83 @@
+import { Ban, CheckCircle, Pencil, XCircle } from "lucide-react";
+import type { Staff } from "@/types";
+import { statusBadge, vipLabel } from "./staff-shared";
+
+interface StaffTableProps {
+  loading: boolean;
+  staffList: Staff[];
+  onEdit: (staff: Staff) => void;
+  onUpdateStatus: (staff: Staff, newStatus: "active" | "disabled") => void;
+}
+
+export default function StaffTable(props: StaffTableProps) {
+  const { loading, staffList, onEdit, onUpdateStatus } = props;
+
+  return (
+    <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-surface-container-high">
+            <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">编号</th>
+            <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">姓名</th>
+            <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">手机号</th>
+            <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">邀请码</th>
+            <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">VIP</th>
+            <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">有效量</th>
+            <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">佣金</th>
+            <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">状态</th>
+            <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {loading ? (
+            <tr><td colSpan={9} className="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr>
+          ) : staffList.length === 0 ? (
+            <tr><td colSpan={9} className="px-6 py-8 text-center text-on-surface-variant">暂无数据</td></tr>
+          ) : (
+            staffList.map((staff) => (
+              <tr key={staff.id} className="border-b border-surface-container-high/50 hover:bg-surface-container-low/50 transition-colors">
+                <td className="px-6 py-4 font-mono text-xs">{staff.staff_no}</td>
+                <td className="px-6 py-4 font-semibold">{staff.name}</td>
+                <td className="px-6 py-4 text-on-surface-variant">{staff.phone}</td>
+                <td className="px-6 py-4 font-mono text-xs text-on-surface-variant">{staff.invite_code || "-"}</td>
+                <td className="px-6 py-4"><span className="text-primary font-bold text-xs">{vipLabel(staff.vip_level)}</span></td>
+                <td className="px-6 py-4 font-bold">{staff.stats?.total_valid ?? 0}</td>
+                <td className="px-6 py-4 font-bold text-secondary">{(staff.stats?.total_commission ?? 0).toFixed(2)}</td>
+                <td className="px-6 py-4">{statusBadge(staff.status)}</td>
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => onEdit(staff)} className="text-primary hover:bg-primary/10 p-1.5 rounded-lg transition-colors">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    {staff.status === "pending_review" ? (
+                      <>
+                        <button onClick={() => onUpdateStatus(staff, "active")}
+                          className="text-green-600 hover:bg-green-50 p-1.5 rounded-lg transition-colors"
+                          title="通过"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => onUpdateStatus(staff, "disabled")}
+                          className="text-error hover:bg-error/10 p-1.5 rounded-lg transition-colors"
+                          title="拒绝"
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={() => onUpdateStatus(staff, staff.status === "active" ? "disabled" : "active")}
+                        className={`${staff.status === "active" ? "text-error hover:bg-error/10" : "text-green-600 hover:bg-green-50"} p-1.5 rounded-lg transition-colors`}
+                      >
+                        {staff.status === "active" ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}

@@ -9,6 +9,7 @@ export interface Staff {
   campaign_id: string | null;
   status: "active" | "disabled" | "pending_review";
   vip_level: number;
+  children_count?: number;
   stats: {
     total_scans: number;
     total_valid: number;
@@ -110,6 +111,25 @@ export interface PayoutAccount {
   bank_name: string;
   is_default: boolean;
   created_at: string;
+}
+
+export interface WithdrawalRequest {
+  id: string;
+  withdrawal_no: string;
+  staff_id: string;
+  amount: number;
+  currency: string;
+  payout_account_type: string;
+  payout_account_name: string;
+  payout_account_number: string;
+  payout_bank_name: string;
+  status: "pending" | "approved" | "rejected" | "paid";
+  reject_reason?: string;
+  transaction_no?: string;
+  remark?: string;
+  created_at: string;
+  reviewed_at?: string;
+  paid_at?: string;
 }
 
 export interface PageResponse<T> {

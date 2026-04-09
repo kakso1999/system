@@ -1,6 +1,6 @@
-import type { CommissionLog, Staff } from "@/types";
+import type { CommissionLog, Staff, WithdrawalRequest } from "@/types";
 
-export type TabKey = "staff" | "commissions";
+export type TabKey = "staff" | "commissions" | "withdrawals";
 
 export interface FinanceOverview {
   total_commission: number;
@@ -21,6 +21,12 @@ export interface AdminCommissionRecord extends CommissionLog {
   source_staff_name?: string;
 }
 
+export interface AdminWithdrawalRecord extends WithdrawalRequest {
+  staff_name?: string;
+  staff_no?: string;
+  staff_phone?: string;
+}
+
 export function toPoints(value: number) {
   return `${Number(value || 0).toFixed(2)}P`;
 }
@@ -33,7 +39,7 @@ export function vipLabel(level: number) {
 export function statusBadge(status: string) {
   const styles: Record<string, string> = {
     pending: "bg-yellow-100 text-yellow-700",
-    approved: "bg-green-100 text-green-700",
+    approved: "bg-blue-100 text-blue-700",
     paid: "bg-green-100 text-green-700",
     rejected: "bg-red-100 text-red-700",
     frozen: "bg-red-100 text-red-700",
@@ -50,4 +56,16 @@ export function statusBadge(status: string) {
       {labels[status] || status}
     </span>
   );
+}
+
+
+export function payoutTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    gcash: "GCash",
+    maya: "Maya",
+    bank: "银行卡",
+    usdt: "USDT",
+    other: "其他",
+  };
+  return labels[type] || type || "-";
 }

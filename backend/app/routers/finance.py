@@ -6,6 +6,11 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_db
 from app.dependencies import get_current_admin
 from app.schemas.common import MessageResponse, PageResponse
+from app.services.withdrawals import (
+    fetch_withdrawal_page,
+    get_withdrawal_or_404,
+    log_finance_action,
+)
 from app.utils.helpers import to_str_id, to_str_ids
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
@@ -16,30 +21,6 @@ def parse_object_id(value: str, message: str) -> ObjectId:
         return ObjectId(value)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=message) from exc
-
-
-async def log_finance_action(
-    db: AsyncIOMotorDatabase,
-    *,
-    admin: dict,
-    action: str,
-    commission_id: ObjectId,
-    old_status: str,
-    new_status: str,
-    amount: float,
-    remark: str,
-):
-    await db.finance_action_logs.insert_one({
-        "operator": admin.get("username", "admin"),
-        "action": action,
-        "target_type": "commission",
-        "target_id": commission_id,
-        "old_status": old_status,
-        "new_status": new_status,
-        "amount_change": amount,
-        "remark": remark,
-        "created_at": datetime.now(timezone.utc),
-    })
 
 
 @router.get("/overview")
@@ -187,7 +168,8 @@ async def approve_commission(
         db,
         admin=admin,
         action="approve",
-        commission_id=oid,
+        target_type="commission",
+        target_id=oid,
         old_status="pending",
         new_status="approved",
         amount=float(commission.get("amount", 0)),
@@ -218,7 +200,8 @@ async def reject_commission(
         db,
         admin=admin,
         action="reject",
-        commission_id=oid,
+        target_type="commission",
+        target_id=oid,
         old_status="pending",
         new_status="rejected",
         amount=float(commission.get("amount", 0)),
@@ -251,3 +234,91 @@ async def commissions(
     total = await db.commission_logs.count_documents(query)
     return PageResponse(items=to_str_ids(items), total=total, page=page, page_size=page_size,
                         pages=math.ceil(total / page_size) if total else 0)
+
+
+@router.get("/withdrawal-requests", response_model=PageResponse)
+async def admin_list_withdrawals(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status: str | None = None,
+    staff_id: str | None = None,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> PageResponse:
+    query: dict = {}
+    if status:
+        query["status"] = status
+    if staff_id:
+        query["staff_id"] = parse_object_id(staff_id, "Invalid staff id")
+    return PageResponse(**await fetch_withdrawal_page(db, query=query, page=page, page_size=page_size, include_staff=True))
+
+
+@router.put("/withdrawal-requests/{request_id}/approve", response_model=MessageResponse)
+async def approve_withdrawal(
+    request_id: str,
+    admin: dict = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> MessageResponse:
+    oid = parse_object_id(request_id, "Invalid withdrawal request id")
+    withdrawal = await get_withdrawal_or_404(db, oid)
+    if withdrawal.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="Only pending withdrawal requests can be approved")
+    await db.withdrawal_requests.update_one(
+        {"_id": oid},
+        {"$set": {"status": "approved", "reviewed_at": datetime.now(timezone.utc), "reviewed_by": admin.get("username", "admin")}},
+    )
+    await log_finance_action(
+        db, admin=admin, action="approve", target_type="withdrawal", target_id=oid,
+        old_status="pending", new_status="approved", amount=float(withdrawal.get("amount", 0)), remark=""
+    )
+    return MessageResponse(message="Withdrawal request approved")
+
+
+@router.put("/withdrawal-requests/{request_id}/reject", response_model=MessageResponse)
+async def reject_withdrawal(
+    request_id: str,
+    payload: dict,
+    admin: dict = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> MessageResponse:
+    oid = parse_object_id(request_id, "Invalid withdrawal request id")
+    withdrawal = await get_withdrawal_or_404(db, oid)
+    if withdrawal.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="Only pending withdrawal requests can be rejected")
+    reason = str(payload.get("reason", "")).strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="Reject reason is required")
+    await db.withdrawal_requests.update_one(
+        {"_id": oid},
+        {"$set": {"status": "rejected", "reject_reason": reason, "reviewed_at": datetime.now(timezone.utc), "reviewed_by": admin.get("username", "admin")}},
+    )
+    await log_finance_action(
+        db, admin=admin, action="reject", target_type="withdrawal", target_id=oid,
+        old_status="pending", new_status="rejected", amount=float(withdrawal.get("amount", 0)), remark=reason
+    )
+    return MessageResponse(message="Withdrawal request rejected")
+
+
+@router.put("/withdrawal-requests/{request_id}/complete", response_model=MessageResponse)
+async def complete_withdrawal(
+    request_id: str,
+    payload: dict,
+    admin: dict = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> MessageResponse:
+    oid = parse_object_id(request_id, "Invalid withdrawal request id")
+    withdrawal = await get_withdrawal_or_404(db, oid)
+    if withdrawal.get("status") != "approved":
+        raise HTTPException(status_code=400, detail="Only approved withdrawal requests can be completed")
+    transaction_no = str(payload.get("transaction_no", "")).strip()
+    if not transaction_no:
+        raise HTTPException(status_code=400, detail="Transaction number is required")
+    remark = str(payload.get("remark", "")).strip()
+    await db.withdrawal_requests.update_one(
+        {"_id": oid},
+        {"$set": {"status": "paid", "transaction_no": transaction_no, "remark": remark or None, "paid_at": datetime.now(timezone.utc), "paid_by": admin.get("username", "admin")}},
+    )
+    await log_finance_action(
+        db, admin=admin, action="complete", target_type="withdrawal", target_id=oid,
+        old_status="approved", new_status="paid", amount=float(withdrawal.get("amount", 0)), remark=remark or transaction_no
+    )
+    return MessageResponse(message="Withdrawal request completed")

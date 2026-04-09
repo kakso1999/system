@@ -5,6 +5,7 @@ import { Pencil, Plus, Trash2, Wallet } from "lucide-react";
 import api from "@/lib/api";
 import type { PageResponse, PayoutAccount } from "@/types";
 import AccountModal from "./account-modal";
+import WithdrawalSection from "./withdrawal-section";
 import {
   AccountForm,
   SettlementRecord,
@@ -175,6 +176,8 @@ export default function WalletPage() {
           })
         )}
       </section>
+
+      <WithdrawalSection accounts={accounts} />
 
       <section className="space-y-3">
         <h2 className="text-lg font-extrabold font-[var(--font-headline)]">Settlement Records</h2>

@@ -75,6 +75,8 @@ async def create_indexes():
     await db.team_rewards.create_index([("staff_id", 1), ("milestone", 1)], unique=True)
     await db.vip_upgrade_logs.create_index([("staff_id", 1), ("created_at", -1)])
     await db.staff_payout_accounts.create_index("staff_id")
+    await db.withdrawal_requests.create_index([("staff_id", 1), ("status", 1)])
+    await db.withdrawal_requests.create_index("created_at")
 
 
 def get_db() -> AsyncIOMotorDatabase:

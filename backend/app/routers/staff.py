@@ -66,6 +66,10 @@ async def validate_campaign(
     return campaign_obj_id
 
 
+async def count_direct_children(db: AsyncIOMotorDatabase, staff_id: ObjectId) -> int:
+    return await db.staff_relations.count_documents({"ancestor_id": staff_id, "level": 1})
+
+
 @router.get("/", response_model=PageResponse)
 async def list_staff(
     page: int = Query(1, ge=1),
@@ -120,6 +124,42 @@ async def create_staff(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username, phone, or invite code already exists") from exc
     document["_id"] = result.inserted_id
     return StaffDetail.model_validate(serialize_staff(document))
+
+
+@router.get("/tree")
+async def staff_tree(db: AsyncIOMotorDatabase = Depends(get_db)):
+    top_level = await db.staff_users.find(
+        {"$or": [{"parent_id": None}, {"parent_id": {"$exists": False}}]},
+        {"password_hash": 0},
+    ).sort("created_at", -1).to_list(length=500)
+
+    result = []
+    for staff in top_level:
+        node = serialize_staff(dict(staff))
+        node["children_count"] = await count_direct_children(db, staff["_id"])
+        result.append(node)
+    return result
+
+
+@router.get("/{staff_id}/children")
+async def staff_children(
+    staff_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    ancestor_id = parse_object_id(staff_id, "staff_id")
+    relations = await db.staff_relations.find(
+        {"ancestor_id": ancestor_id, "level": 1}
+    ).to_list(length=500)
+
+    children = []
+    for relation in relations:
+        member = await db.staff_users.find_one({"_id": relation["staff_id"]}, {"password_hash": 0})
+        if not member:
+            continue
+        node = serialize_staff(dict(member))
+        node["children_count"] = await count_direct_children(db, relation["staff_id"])
+        children.append(node)
+    return children
 
 
 @router.get("/{staff_id}", response_model=StaffDetail)

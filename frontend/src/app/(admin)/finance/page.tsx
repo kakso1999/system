@@ -9,6 +9,7 @@ import ManualSettleModal from "./manual-settle-modal";
 import OverviewCards from "./overview-cards";
 import RejectModal from "./reject-modal";
 import StaffPerformanceSection from "./staff-performance-section";
+import WithdrawalManagementTab from "./withdrawal-management-tab";
 
 const emptyOverview: FinanceOverview = {
   total_commission: 0,
@@ -172,6 +173,12 @@ export default function FinancePage() {
         >
           佣金记录
         </button>
+        <button
+          onClick={() => setActiveTab("withdrawals")}
+          className={`rounded-full px-4 py-2 text-sm font-bold ${activeTab === "withdrawals" ? "bg-primary text-on-primary" : "text-on-surface-variant"}`}
+        >
+          提现管理
+        </button>
       </section>
 
       {activeTab === "staff" && (
@@ -200,6 +207,10 @@ export default function FinancePage() {
           onApprove={approveCommission}
           onReject={(record) => { setRejectModal(record); setRejectReason(""); }}
         />
+      )}
+
+      {activeTab === "withdrawals" && (
+        <WithdrawalManagementTab />
       )}
 
       {settleModal && (

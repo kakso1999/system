@@ -1,0 +1,186 @@
+import math
+from datetime import datetime, timezone
+
+from bson import ObjectId
+from fastapi import HTTPException, status
+from motor.motor_asyncio import AsyncIOMotorDatabase
+
+from app.utils.helpers import to_str_ids
+
+
+async def sum_amount(collection, match: dict) -> float:
+    result = await collection.aggregate([
+        {"$match": match},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
+    ]).to_list(length=1)
+    return float(result[0]["total"]) if result else 0.0
+
+
+async def get_withdrawal_balance_snapshot(
+    db: AsyncIOMotorDatabase,
+    staff_id: ObjectId,
+) -> dict:
+    total_approved = await sum_amount(
+        db.commission_logs,
+        {"beneficiary_staff_id": staff_id, "status": "approved"},
+    )
+    total_withdrawn = await sum_amount(
+        db.withdrawal_requests,
+        {"staff_id": staff_id, "status": {"$ne": "rejected"}},
+    )
+    pending_withdrawals = await sum_amount(
+        db.withdrawal_requests,
+        {"staff_id": staff_id, "status": "pending"},
+    )
+    return {
+        "total_approved": round(total_approved, 2),
+        "total_withdrawn": round(total_withdrawn, 2),
+        "available": round(total_approved - total_withdrawn, 2),
+        "pending_withdrawals": round(pending_withdrawals, 2),
+    }
+
+
+async def get_payout_account_or_404(
+    db: AsyncIOMotorDatabase,
+    staff_id: ObjectId,
+    payout_account_id: ObjectId,
+) -> dict:
+    account = await db.staff_payout_accounts.find_one(
+        {"_id": payout_account_id, "staff_id": staff_id}
+    )
+    if not account:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payout account not found")
+    return account
+
+
+def generate_withdrawal_no(now: datetime) -> str:
+    return f"WD{now.strftime('%Y%m%d%H%M%S%f')}"
+
+
+def build_withdrawal_document(
+    *,
+    staff_id: ObjectId,
+    amount: float,
+    payout_account: dict,
+    now: datetime,
+) -> dict:
+    return {
+        "withdrawal_no": generate_withdrawal_no(now),
+        "staff_id": staff_id,
+        "amount": round(amount, 2),
+        "currency": "PHP",
+        "payout_account_id": payout_account["_id"],
+        "payout_account_type": payout_account.get("type", ""),
+        "payout_account_name": payout_account.get("account_name", ""),
+        "payout_account_number": payout_account.get("account_number", ""),
+        "payout_bank_name": payout_account.get("bank_name", ""),
+        "status": "pending",
+        "reject_reason": None,
+        "transaction_no": None,
+        "remark": None,
+        "created_at": now,
+        "reviewed_at": None,
+        "reviewed_by": None,
+        "paid_at": None,
+        "paid_by": None,
+    }
+
+
+async def create_withdrawal_request(
+    db: AsyncIOMotorDatabase,
+    *,
+    staff_id: ObjectId,
+    amount: float,
+    payout_account: dict,
+) -> dict:
+    now = datetime.now(timezone.utc)
+    document = build_withdrawal_document(
+        staff_id=staff_id,
+        amount=amount,
+        payout_account=payout_account,
+        now=now,
+    )
+    result = await db.withdrawal_requests.insert_one(document)
+    document["_id"] = result.inserted_id
+    return document
+
+
+async def attach_staff_metadata(
+    db: AsyncIOMotorDatabase,
+    items: list[dict],
+) -> list[dict]:
+    staff_ids = list({item["staff_id"] for item in items if item.get("staff_id")})
+    if not staff_ids:
+        return items
+    staff_docs = await db.staff_users.find(
+        {"_id": {"$in": staff_ids}},
+        {"name": 1, "staff_no": 1, "phone": 1},
+    ).to_list(length=len(staff_ids))
+    staff_map = {doc["_id"]: doc for doc in staff_docs}
+    enriched_items = []
+    for item in items:
+        enriched = dict(item)
+        staff = staff_map.get(item.get("staff_id"))
+        if staff:
+            enriched["staff_name"] = staff.get("name", "")
+            enriched["staff_no"] = staff.get("staff_no", "")
+            enriched["staff_phone"] = staff.get("phone", "")
+        enriched_items.append(enriched)
+    return enriched_items
+
+
+async def fetch_withdrawal_page(
+    db: AsyncIOMotorDatabase,
+    *,
+    query: dict,
+    page: int,
+    page_size: int,
+    include_staff: bool,
+) -> dict:
+    cursor = db.withdrawal_requests.find(query).sort("created_at", -1).skip((page - 1) * page_size).limit(page_size)
+    items = await cursor.to_list(length=page_size)
+    if include_staff:
+        items = await attach_staff_metadata(db, items)
+    total = await db.withdrawal_requests.count_documents(query)
+    return {
+        "items": to_str_ids(items),
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "pages": math.ceil(total / page_size) if total else 0,
+    }
+
+
+async def get_withdrawal_or_404(
+    db: AsyncIOMotorDatabase,
+    request_id: ObjectId,
+) -> dict:
+    withdrawal = await db.withdrawal_requests.find_one({"_id": request_id})
+    if not withdrawal:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Withdrawal request not found")
+    return withdrawal
+
+
+async def log_finance_action(
+    db: AsyncIOMotorDatabase,
+    *,
+    admin: dict,
+    action: str,
+    target_type: str,
+    target_id: ObjectId,
+    old_status: str,
+    new_status: str,
+    amount: float,
+    remark: str,
+) -> None:
+    await db.finance_action_logs.insert_one({
+        "operator": admin.get("username", "admin"),
+        "action": action,
+        "target_type": target_type,
+        "target_id": target_id,
+        "old_status": old_status,
+        "new_status": new_status,
+        "amount_change": amount,
+        "remark": remark,
+        "created_at": datetime.now(timezone.utc),
+    })
