@@ -101,7 +101,7 @@ function normalizeVipProgress(raw: unknown, staff: HomeData["staff"]): VipProgre
   return {
     current_level: currentLevel,
     current_valid: currentValid,
-    next_level,
+    next_level: nextLevel,
     next_level_required: Math.max(nextRequired, 1),
     remaining_valid: Math.max(remaining, 0),
     progress_percent: Math.max(0, Math.min(progress, 100)),
