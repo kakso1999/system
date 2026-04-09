@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
 import type { PageResponse, Staff } from "@/types";
-import { Users } from "lucide-react";
+import { Users, Copy, UserPlus } from "lucide-react";
 
 type TeamTab = "all" | "1" | "2" | "3";
 
@@ -38,6 +38,11 @@ export default function TeamPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [inviteCode, setInviteCode] = useState("");
+
+  useEffect(() => {
+    api.get("/api/promoter/qrcode").then(res => setInviteCode(res.data.invite_code)).catch(() => {});
+  }, []);
 
   const loadTeam = useCallback(async () => {
     setLoading(true);
@@ -65,6 +70,36 @@ export default function TeamPage() {
         <h1 className="text-3xl font-extrabold font-[var(--font-headline)] tracking-tight">My Team</h1>
         <p className="text-sm text-on-surface-variant">Total Members: {total}</p>
       </section>
+
+      {/* Invite Section */}
+      {inviteCode && (
+        <section className="bg-secondary-container/30 rounded-xl p-5 shadow-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="bg-secondary/10 p-2 rounded-full">
+              <UserPlus className="w-5 h-5 text-secondary" />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm">Invite New Promoter</h3>
+              <p className="text-xs text-on-surface-variant">Share this link to grow your team</p>
+            </div>
+          </div>
+          <div className="p-3 bg-surface-container-low rounded-lg mb-3">
+            <p className="text-xs text-on-surface-variant break-all">
+              {typeof window !== "undefined" ? `${window.location.origin}/staff-register?invite=${inviteCode}` : ""}
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(`${window.location.origin}/staff-register?invite=${inviteCode}`);
+              alert("Invite link copied!");
+            }}
+            className="w-full bg-secondary text-on-secondary py-2.5 rounded-full font-bold text-sm flex items-center justify-center gap-2 shadow-sm hover:shadow-md active:scale-[0.98] transition-all"
+          >
+            <Copy className="w-4 h-4" />
+            Copy Invite Link
+          </button>
+        </section>
+      )}
 
       <section className="bg-surface-container-lowest rounded-xl p-2 shadow-sm">
         <div className="grid grid-cols-4 gap-2">

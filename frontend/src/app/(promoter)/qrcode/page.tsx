@@ -22,18 +22,10 @@ export default function QRCodePage() {
   };
 
   const qrUrl = qrData && typeof window !== "undefined" ? `${window.location.origin}${qrData.qr_data}` : "";
-  const inviteUrl = qrData && typeof window !== "undefined"
-    ? `${window.location.origin}/staff-register?invite=${qrData.invite_code}`
-    : "";
 
   const copyLink = () => {
     navigator.clipboard.writeText(qrUrl);
     alert("Link copied!");
-  };
-
-  const copyInviteLink = () => {
-    navigator.clipboard.writeText(inviteUrl);
-    alert("Invite link copied!");
   };
 
   if (!qrData) {
@@ -87,23 +79,6 @@ export default function QRCodePage() {
           <div className="mt-6 p-3 bg-surface-container-low rounded-xl">
             <p className="text-xs text-on-surface-variant break-all">{qrUrl}</p>
           </div>
-        </div>
-
-        <div className="bg-secondary-container/35 rounded-2xl p-6 shadow-sm mt-6">
-          <h3 className="text-lg font-extrabold font-[var(--font-headline)] tracking-tight text-secondary mb-2">
-            Invite New Promoter
-          </h3>
-          <p className="text-xs text-on-surface-variant mb-4">Share this link to invite new team members</p>
-          <div className="p-3 bg-surface-container-low rounded-xl mb-4">
-            <p className="text-xs text-on-surface-variant break-all">{inviteUrl}</p>
-          </div>
-          <button
-            onClick={copyInviteLink}
-            className="w-full bg-secondary text-on-secondary py-3 rounded-full font-bold text-sm flex items-center justify-center gap-2 shadow-md shadow-secondary/20 hover:shadow-lg active:scale-[0.98] transition-all"
-          >
-            <Copy className="w-[18px] h-[18px]" />
-            Copy Invite Link
-          </button>
         </div>
       </main>
     </div>
