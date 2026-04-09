@@ -65,21 +65,39 @@ function getDefaultVipProgress(staff: HomeData["staff"]): VipProgress {
   };
 }
 
+function parseThresholds(raw: unknown): Array<{ level: number; threshold: number }> {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const value = item as Record<string, unknown>;
+      const level = toNumber(value.level, -1);
+      const threshold = toNumber(value.threshold, -1);
+      if (level < 0 || threshold < 0) return null;
+      return { level, threshold };
+    })
+    .filter((item): item is { level: number; threshold: number } => item !== null)
+    .sort((a, b) => a.level - b.level);
+}
+
 function normalizeVipProgress(raw: unknown, staff: HomeData["staff"]): VipProgress {
   const fallback = getDefaultVipProgress(staff);
   if (!raw || typeof raw !== "object") return fallback;
 
   const data = raw as Record<string, unknown>;
+  const thresholds = parseThresholds(data.thresholds);
   const currentLevel = toNumber(data.current_level ?? data.vip_level, fallback.current_level);
   const currentValid = toNumber(data.current_valid ?? data.total_valid, fallback.current_valid);
-  const nextLevelRaw = data.next_level;
+  const nextByThreshold = thresholds.find((item) => currentValid < item.threshold);
+  const nextLevelRaw = data.next_level ?? nextByThreshold?.level ?? null;
   const nextLevel = nextLevelRaw === null ? null : toNumber(nextLevelRaw, fallback.next_level ?? currentLevel + 1);
+  const nextThreshold = toNumber(data.next_threshold, nextByThreshold?.threshold ?? fallback.next_level_required);
   const nextRequired = toNumber(
-    data.next_level_required ?? data.next_required_valid ?? data.target_valid,
-    fallback.next_level_required
+    data.next_level_required ?? data.next_required_valid ?? data.target_valid ?? nextThreshold,
+    nextThreshold
   );
   const remaining = toNumber(
-    data.remaining_valid,
+    data.remaining_valid ?? data.needed,
     nextLevel === null ? 0 : Math.max(0, nextRequired - currentValid)
   );
   const progress = toNumber(

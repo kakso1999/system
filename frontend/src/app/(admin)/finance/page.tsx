@@ -42,12 +42,18 @@ export default function FinancePage() {
   const loadOverview = useCallback(async () => {
     try {
       const res = await api.get<FinanceOverview>("/api/admin/finance/overview");
+      const data = res.data as FinanceOverview & {
+        total_pending?: number;
+        total_approved?: number;
+        total_paid?: number;
+        total_frozen?: number;
+      };
       setOverview({
-        total_commission: Number(res.data.total_commission || 0),
-        pending: Number(res.data.pending || 0),
-        approved: Number(res.data.approved || 0),
-        paid: Number(res.data.paid || 0),
-        frozen: Number(res.data.frozen || 0),
+        total_commission: Number(data.total_commission || 0),
+        pending: Number(data.pending ?? data.total_pending ?? 0),
+        approved: Number(data.approved ?? data.total_approved ?? 0),
+        paid: Number(data.paid ?? data.total_paid ?? 0),
+        frozen: Number(data.frozen ?? data.total_frozen ?? 0),
       });
     } catch {
       setOverview(emptyOverview);

@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+import secrets
+import time
 
 from pymongo.errors import DuplicateKeyError
 
@@ -6,6 +8,10 @@ from pymongo.errors import DuplicateKeyError
 async def get_setting(db, key: str, default=None):
     doc = await db.system_settings.find_one({"key": key})
     return doc["value"] if doc else default
+
+
+def generate_commission_no() -> str:
+    return f"CM{time.time_ns()}{secrets.randbelow(1000):03d}"
 
 
 async def get_team_total(db, staff_id) -> int:
@@ -33,7 +39,7 @@ async def award_team_reward(db, staff_doc, *, milestone: str, threshold: int, am
     except DuplicateKeyError:
         return
     await db.commission_logs.insert_one({
-        "commission_no": f"CM{int(now.timestamp() * 1000)}",
+        "commission_no": generate_commission_no(),
         "claim_id": None,
         "source_staff_id": staff_doc["_id"],
         "beneficiary_staff_id": staff_doc["_id"],

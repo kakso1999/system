@@ -41,8 +41,10 @@ export default function WalletPage() {
   const loadSettlements = useCallback(async () => {
     setLoadingSettlements(true);
     try {
-      const res = await api.get<SettlementRecord[] | PageResponse<SettlementRecord>>("/api/promoter/settlement");
-      setSettlements(Array.isArray(res.data) ? res.data : (res.data.items || []));
+      const res = await api.get<PageResponse<SettlementRecord>>("/api/promoter/commission", {
+        params: { status: "paid", page: 1, page_size: 100 },
+      });
+      setSettlements(res.data.items || []);
     } catch {
       setSettlements([]);
     } finally {
@@ -106,7 +108,7 @@ export default function WalletPage() {
 
   const setDefault = async (account: PayoutAccount) => {
     try {
-      await api.put(`/api/promoter/payout-accounts/${account.id}`, { is_default: true });
+      await api.put(`/api/promoter/payout-accounts/${account.id}/default`);
       loadAccounts();
     } catch {
       alert("Failed to set default account");

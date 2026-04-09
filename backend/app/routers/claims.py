@@ -5,7 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_db
 from app.dependencies import get_current_admin
 from app.schemas.common import PageResponse
-from app.utils.helpers import to_str_id, to_str_ids
+from app.utils.helpers import to_str_id
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
 
@@ -16,6 +16,12 @@ def serialize_claim(doc: dict) -> dict:
         if isinstance(data.get(k), ObjectId):
             data[k] = str(data[k])
     return data
+
+
+def parse_object_id(value: str, field_name: str) -> ObjectId:
+    if not ObjectId.is_valid(value):
+        raise HTTPException(status_code=400, detail=f"Invalid {field_name}")
+    return ObjectId(value)
 
 
 @router.get("/", response_model=PageResponse)
@@ -29,9 +35,9 @@ async def list_claims(
 ):
     query: dict = {}
     if campaign_id:
-        query["campaign_id"] = ObjectId(campaign_id)
+        query["campaign_id"] = parse_object_id(campaign_id, "campaign_id")
     if staff_id:
-        query["staff_id"] = ObjectId(staff_id)
+        query["staff_id"] = parse_object_id(staff_id, "staff_id")
     if phone:
         query["phone"] = {"$regex": phone, "$options": "i"}
     if status:
@@ -54,7 +60,7 @@ async def list_claims(
 
 @router.get("/{claim_id}")
 async def get_claim(claim_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
-    claim = await db.claims.find_one({"_id": ObjectId(claim_id)})
+    claim = await db.claims.find_one({"_id": parse_object_id(claim_id, "claim_id")})
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
     return serialize_claim(claim)

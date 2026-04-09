@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+import secrets
+import time
 
 from pymongo.errors import DuplicateKeyError
 
@@ -6,6 +8,10 @@ from pymongo.errors import DuplicateKeyError
 async def get_setting(db, key: str, default=None):
     doc = await db.system_settings.find_one({"key": key})
     return doc["value"] if doc else default
+
+
+def generate_commission_no() -> str:
+    return f"CM{time.time_ns()}{secrets.randbelow(1000):03d}"
 
 
 async def create_commission_log(
@@ -22,7 +28,7 @@ async def create_commission_log(
 ):
     now = datetime.now(timezone.utc)
     log = {
-        "commission_no": f"CM{int(now.timestamp() * 1000)}",
+        "commission_no": generate_commission_no(),
         "claim_id": claim_id,
         "source_staff_id": source_staff_id,
         "beneficiary_staff_id": beneficiary_staff_id,

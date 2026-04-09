@@ -78,7 +78,7 @@ async def list_staff(
     if search:
         pattern = {"$regex": re.escape(search), "$options": "i"}
         query["$or"] = [{"name": pattern}, {"phone": pattern}, {"staff_no": pattern}]
-    projection = {"password_hash": 0, "invite_code": 0, "parent_id": 0, "campaign_id": 0, "updated_at": 0}
+    projection = {"password_hash": 0, "updated_at": 0}
     cursor = db.staff_users.find(query, projection).sort("created_at", -1).skip((page - 1) * page_size).limit(page_size)
     items = await cursor.to_list(length=page_size)
     total = await db.staff_users.count_documents(query)

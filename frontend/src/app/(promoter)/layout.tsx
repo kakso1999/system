@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Home, QrCode, Users, Wallet, Coins } from "lucide-react";
 import Cookies from "js-cookie";
+import { clearAuth } from "@/lib/auth";
 
 type NavItem = {
   label: string;
@@ -35,7 +36,9 @@ export default function PromoterLayout({ children }: { children: React.ReactNode
 
   useEffect(() => {
     const token = Cookies.get("token");
-    if (!token) {
+    const role = Cookies.get("role");
+    if (!token || role !== "staff") {
+      clearAuth();
       router.replace("/staff-login");
       return;
     }

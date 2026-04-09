@@ -102,7 +102,10 @@ async def team(
 ):
     query: dict = {"ancestor_id": current_staff["_id"]}
     if level and level != "all":
-        query["level"] = int(level)
+        try:
+            query["level"] = int(level)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid level filter") from exc
     relations = await db.staff_relations.find(query).skip((page - 1) * page_size).limit(page_size).to_list(length=page_size)
     total = await db.staff_relations.count_documents(query)
     members = []
@@ -120,12 +123,18 @@ async def team(
 async def commission(
     page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
     level: int | None = None,
+    status: str | None = None,
+    commission_type: str | None = Query(None, alias="type"),
     current_staff: dict = Depends(get_current_staff),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     query: dict = {"beneficiary_staff_id": current_staff["_id"]}
     if level:
         query["level"] = level
+    if status:
+        query["status"] = status
+    if commission_type:
+        query["type"] = commission_type
     cursor = db.commission_logs.find(query).sort("created_at", -1).skip((page - 1) * page_size).limit(page_size)
     items = await cursor.to_list(length=page_size)
     total = await db.commission_logs.count_documents(query)

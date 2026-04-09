@@ -90,8 +90,11 @@ async def manual_settle(
     admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    staff_id = ObjectId(payload["staff_id"])
-    amount = float(payload["amount"])
+    staff_id = parse_object_id(payload.get("staff_id", ""), "Invalid staff id")
+    try:
+        amount = float(payload["amount"])
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid amount") from exc
     remark = payload.get("remark", "")
     staff = await db.staff_users.find_one({"_id": staff_id})
     if not staff:
@@ -147,7 +150,7 @@ async def settlement_records(
 ):
     query: dict = {"status": "paid"}
     if staff_id:
-        query["beneficiary_staff_id"] = ObjectId(staff_id)
+        query["beneficiary_staff_id"] = parse_object_id(staff_id, "staff_id")
     cursor = db.commission_logs.find(query).sort("paid_at", -1).skip((page - 1) * page_size).limit(page_size)
     items = await cursor.to_list(length=page_size)
     total = await db.commission_logs.count_documents(query)

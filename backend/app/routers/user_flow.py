@@ -42,6 +42,13 @@ def safe_object_id(value):
         return None
 
 
+def parse_object_id(value: str, field_name: str) -> ObjectId:
+    oid = safe_object_id(value)
+    if not isinstance(oid, ObjectId):
+        raise HTTPException(status_code=400, detail=f"Invalid {field_name}")
+    return oid
+
+
 async def log_risk(db, campaign_id, phone, ip, device_fp, rule, reason):
     await db.risk_logs.insert_one({
         "campaign_id": safe_object_id(campaign_id),
@@ -153,7 +160,7 @@ async def spin(payload: dict, request: Request, db: AsyncIOMotorDatabase = Depen
             if cid_str != expected_cid:
                 raise HTTPException(status_code=400, detail="Campaign does not match promoter")
 
-    cid = ObjectId(cid_str)
+    cid = parse_object_id(cid_str, "campaign_id")
     items = await db.wheel_items.find(
         {"campaign_id": cid, "enabled": True}
     ).sort("sort_order", 1).to_list(length=50)
@@ -307,12 +314,15 @@ async def complete(
     background_tasks: BackgroundTasks,
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    cid = ObjectId(payload["campaign_id"])
-    wid = ObjectId(payload["wheel_item_id"])
+    cid = parse_object_id(payload.get("campaign_id", ""), "campaign_id")
+    wid = parse_object_id(payload.get("wheel_item_id", ""), "wheel_item_id")
     phone = validate_phone(payload.get("phone", ""))
     ip = request.client.host if request.client else ""
     device_fp = payload.get("device_fingerprint", "")
-    staff = await db.staff_users.find_one({"invite_code": payload["staff_code"].upper()})
+    staff_code = str(payload.get("staff_code", "")).strip().upper()
+    if not staff_code:
+        raise HTTPException(status_code=422, detail="staff_code is required")
+    staff = await db.staff_users.find_one({"invite_code": staff_code})
     if not staff:
         raise HTTPException(status_code=404, detail="Promoter not found")
 
@@ -396,7 +406,7 @@ async def complete(
 
 @router.get("/result/{claim_id}")
 async def get_result(claim_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
-    claim = await db.claims.find_one({"_id": ObjectId(claim_id)})
+    claim = await db.claims.find_one({"_id": parse_object_id(claim_id, "claim_id")})
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
     item = await db.wheel_items.find_one({"_id": claim.get("wheel_item_id")})
