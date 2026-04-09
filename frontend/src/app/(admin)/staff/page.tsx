@@ -1,16 +1,19 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { UserPlus, Pencil, Ban, CheckCircle } from "lucide-react";
+import { UserPlus, Pencil, Ban, CheckCircle, XCircle } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import type { Staff, PageResponse } from "@/types";
 
 export default function StaffManagementPage() {
+  const searchParams = useSearchParams();
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [total, setTotal] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "");
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
@@ -22,17 +25,29 @@ export default function StaffManagementPage() {
       const params: Record<string, string | number> = { page, page_size: 20 };
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
-      const res = await api.get<PageResponse<Staff>>("/api/admin/staff/", { params });
-      setStaffList(res.data.items);
-      setTotal(res.data.total);
+      const [listRes, pendingRes] = await Promise.all([
+        api.get<PageResponse<Staff>>("/api/admin/staff/", { params }),
+        api.get<PageResponse<Staff>>("/api/admin/staff/", {
+          params: { page: 1, page_size: 1, status: "pending_review" },
+        }),
+      ]);
+      setStaffList(listRes.data.items);
+      setTotal(listRes.data.total);
+      setPendingCount(pendingRes.data.total);
     } catch {
       setStaffList([]);
+      setPendingCount(0);
     } finally {
       setLoading(false);
     }
   }, [page, search, statusFilter]);
 
   useEffect(() => { loadStaff(); }, [loadStaff]);
+  useEffect(() => {
+    const urlStatus = searchParams.get("status") || "";
+    setStatusFilter(urlStatus);
+    setPage(1);
+  }, [searchParams]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,8 +69,7 @@ export default function StaffManagementPage() {
     }
   };
 
-  const toggleStatus = async (staff: Staff) => {
-    const newStatus = staff.status === "active" ? "disabled" : "active";
+  const updateStatus = async (staff: Staff, newStatus: "active" | "disabled") => {
     try {
       await api.put(`/api/admin/staff/${staff.id}/status`, { status: newStatus });
       loadStaff();
@@ -64,10 +78,16 @@ export default function StaffManagementPage() {
     }
   };
 
-  const openEdit = (staff: Staff) => {
-    setEditingStaff(staff);
-    setForm({ name: staff.name, phone: staff.phone, username: staff.username, password: "" });
-    setShowModal(true);
+  const openEdit = async (staff: Staff) => {
+    try {
+      const detailRes = await api.get<Staff>(`/api/admin/staff/${staff.id}`);
+      const detail = detailRes.data;
+      setEditingStaff(detail);
+      setForm({ name: detail.name, phone: detail.phone, username: detail.username, password: "" });
+      setShowModal(true);
+    } catch {
+      alert("加载详情失败");
+    }
   };
 
   const openCreate = () => {
@@ -104,7 +124,12 @@ export default function StaffManagementPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-extrabold font-[var(--font-headline)] tracking-tight">地推员管理</h1>
-          <p className="text-on-surface-variant mt-1">共 {total} 名地推员</p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-on-surface-variant">共 {total} 名地推员</p>
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-800">
+              {pendingCount} 条待审核
+            </span>
+          </div>
         </div>
         <button onClick={openCreate}
           className="bg-primary text-on-primary px-6 py-3 rounded-full font-bold text-sm flex items-center gap-2 shadow-lg shadow-primary/20 hover:shadow-xl active:scale-[0.98] transition-all"
@@ -139,6 +164,7 @@ export default function StaffManagementPage() {
               <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">编号</th>
               <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">姓名</th>
               <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">手机号</th>
+              <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">邀请码</th>
               <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">VIP</th>
               <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">有效量</th>
               <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">佣金</th>
@@ -148,15 +174,16 @@ export default function StaffManagementPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr>
+              <tr><td colSpan={9} className="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr>
             ) : staffList.length === 0 ? (
-              <tr><td colSpan={8} className="px-6 py-8 text-center text-on-surface-variant">暂无数据</td></tr>
+              <tr><td colSpan={9} className="px-6 py-8 text-center text-on-surface-variant">暂无数据</td></tr>
             ) : (
               staffList.map((s) => (
                 <tr key={s.id} className="border-b border-surface-container-high/50 hover:bg-surface-container-low/50 transition-colors">
                   <td className="px-6 py-4 font-mono text-xs">{s.staff_no}</td>
                   <td className="px-6 py-4 font-semibold">{s.name}</td>
                   <td className="px-6 py-4 text-on-surface-variant">{s.phone}</td>
+                  <td className="px-6 py-4 font-mono text-xs text-on-surface-variant">{s.invite_code || "-"}</td>
                   <td className="px-6 py-4"><span className="text-primary font-bold text-xs">{vipLabel(s.vip_level)}</span></td>
                   <td className="px-6 py-4 font-bold">{s.stats?.total_valid ?? 0}</td>
                   <td className="px-6 py-4 font-bold text-secondary">{(s.stats?.total_commission ?? 0).toFixed(2)}</td>
@@ -166,11 +193,28 @@ export default function StaffManagementPage() {
                       <button onClick={() => openEdit(s)} className="text-primary hover:bg-primary/10 p-1.5 rounded-lg transition-colors">
                         <Pencil className="w-4 h-4" />
                       </button>
-                      <button onClick={() => toggleStatus(s)}
-                        className={`${s.status === "active" ? "text-error hover:bg-error/10" : "text-green-600 hover:bg-green-50"} p-1.5 rounded-lg transition-colors`}
-                      >
-                        {s.status === "active" ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
-                      </button>
+                      {s.status === "pending_review" ? (
+                        <>
+                          <button onClick={() => updateStatus(s, "active")}
+                            className="text-green-600 hover:bg-green-50 p-1.5 rounded-lg transition-colors"
+                            title="通过"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => updateStatus(s, "disabled")}
+                            className="text-error hover:bg-error/10 p-1.5 rounded-lg transition-colors"
+                            title="拒绝"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        </>
+                      ) : (
+                        <button onClick={() => updateStatus(s, s.status === "active" ? "disabled" : "active")}
+                          className={`${s.status === "active" ? "text-error hover:bg-error/10" : "text-green-600 hover:bg-green-50"} p-1.5 rounded-lg transition-colors`}
+                        >
+                          {s.status === "active" ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -211,6 +255,12 @@ export default function StaffManagementPage() {
                 <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   className="w-full bg-surface-container-low border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/40" required />
               </div>
+              {editingStaff && (
+                <div className="grid grid-cols-1 gap-2 rounded-xl bg-surface-container-low p-3 text-xs text-on-surface-variant">
+                  <p><span className="font-bold">邀请码：</span>{editingStaff.invite_code || "-"}</p>
+                  <p><span className="font-bold">上级ID：</span>{editingStaff.parent_id || "无"}</p>
+                </div>
+              )}
               {!editingStaff && (
                 <>
                   <div>

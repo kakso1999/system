@@ -174,6 +174,7 @@ async def register(
         created_at=created_at,
         status_value="pending_review",
         parent_id=parent["_id"] if parent else None,
+        campaign_id=parent.get("campaign_id") if parent else None,
     )
     try:
         result = await db.staff_users.insert_one(document)

@@ -11,16 +11,22 @@ interface DashboardData {
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { loadDashboard(); }, []);
 
   const loadDashboard = async () => {
     try {
-      const res = await api.get("/api/admin/dashboard/");
-      setData(res.data);
+      const [dashboardRes, pendingRes] = await Promise.all([
+        api.get("/api/admin/dashboard/"),
+        api.get("/api/admin/staff/", { params: { status: "pending_review", page: 1, page_size: 1 } }),
+      ]);
+      setData(dashboardRes.data);
+      setPendingCount(pendingRes.data.total || 0);
     } catch {
       setData({ today_scans: 0, today_valid: 0, today_staff: 0, total_scans: 0, total_valid: 0, total_staff: 0, total_commission: 0 });
+      setPendingCount(0);
     } finally {
       setLoading(false);
     }
@@ -58,6 +64,14 @@ export default function DashboardPage() {
           );
         })}
       </div>
+      <a
+        href="/staff?status=pending_review"
+        className="block bg-yellow-50 border border-yellow-200 rounded-xl p-5 hover:bg-yellow-100/80 transition-colors"
+      >
+        <p className="text-xs font-bold text-yellow-700 uppercase tracking-wider mb-2">Pending Approvals</p>
+        <p className="text-2xl font-extrabold font-[var(--font-headline)] text-yellow-800">{pendingCount}</p>
+        <p className="text-sm text-yellow-700 mt-1">{pendingCount} pending registrations</p>
+      </a>
     </div>
   );
 }

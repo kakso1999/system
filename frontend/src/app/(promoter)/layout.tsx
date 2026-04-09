@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Home, QrCode, Users, Wallet } from "lucide-react";
+import { Home, QrCode, Users, Wallet, Coins } from "lucide-react";
 import Cookies from "js-cookie";
 
 type NavItem = {
@@ -16,6 +16,7 @@ const navItems: NavItem[] = [
   { label: "Home", href: "/home", icon: Home },
   { label: "QR Code", href: "/qrcode", icon: QrCode, elevated: true },
   { label: "Team", href: "/team", icon: Users },
+  { label: "Earnings", href: "/commission", icon: Coins },
   { label: "Wallet", href: "/wallet", icon: Wallet },
 ];
 
@@ -23,6 +24,7 @@ function isActivePath(pathname: string, href: string) {
   if (pathname === href) return true;
   if (href === "/wallet" && pathname.startsWith("/wallet")) return true;
   if (href === "/team" && pathname.startsWith("/team")) return true;
+  if (href === "/commission" && pathname.startsWith("/commission")) return true;
   return false;
 }
 
