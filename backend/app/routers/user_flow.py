@@ -3,11 +3,14 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
 
 from app.database import get_db
+from app.services.commission import calculate_commissions
+from app.services.team_reward import check_team_rewards
+from app.services.vip import check_vip_upgrade
 from app.utils.sms import send_sms
 
 router = APIRouter()
@@ -18,6 +21,15 @@ PHONE_RE = re.compile(r"^\+?[1-9]\d{6,14}$")
 async def get_setting(db, key: str):
     doc = await db.system_settings.find_one({"key": key})
     return doc["value"] if doc else None
+
+
+async def process_post_claim(db, staff_doc, claim_id, campaign_id):
+    await check_vip_upgrade(db, staff_doc["_id"])
+    latest_staff = await db.staff_users.find_one({"_id": staff_doc["_id"]})
+    if not latest_staff:
+        return
+    await calculate_commissions(db, latest_staff, claim_id, campaign_id)
+    await check_team_rewards(db, latest_staff)
 
 
 def safe_object_id(value):
@@ -289,7 +301,12 @@ async def verify_otp(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
 
 
 @router.post("/complete")
-async def complete(payload: dict, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+async def complete(
+    payload: dict,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
     cid = ObjectId(payload["campaign_id"])
     wid = ObjectId(payload["wheel_item_id"])
     phone = validate_phone(payload.get("phone", ""))
@@ -368,6 +385,7 @@ async def complete(payload: dict, request: Request, db: AsyncIOMotorDatabase = D
         {"_id": staff["_id"]},
         {"$inc": {"stats.total_valid": 1}},
     )
+    background_tasks.add_task(process_post_claim, db, staff, result.inserted_id, cid)
     return {
         "success": True, "claim_id": str(result.inserted_id),
         "prize_type": item["type"], "reward_code": reward_code,

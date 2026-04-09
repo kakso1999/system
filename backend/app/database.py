@@ -59,6 +59,12 @@ async def create_indexes():
         [("beneficiary_staff_id", 1), ("status", 1)]
     )
     await db.commission_logs.create_index("claim_id")
+    await db.commission_logs.create_index(
+        [("claim_id", 1), ("beneficiary_staff_id", 1)],
+        unique=True,
+        partialFilterExpression={"type": {"$ne": "team_reward"}},
+    )
+    await db.commission_logs.create_index("created_at")
     # otp_records - TTL index
     await db.otp_records.create_index("expires_at", expireAfterSeconds=0)
     await db.otp_records.create_index([("phone", 1), ("expires_at", 1)])
@@ -66,6 +72,9 @@ async def create_indexes():
     await db.risk_logs.create_index([("created_at", -1)])
     # system_settings
     await db.system_settings.create_index("key", unique=True)
+    await db.team_rewards.create_index([("staff_id", 1), ("milestone", 1)], unique=True)
+    await db.vip_upgrade_logs.create_index([("staff_id", 1), ("created_at", -1)])
+    await db.staff_payout_accounts.create_index("staff_id")
 
 
 def get_db() -> AsyncIOMotorDatabase:

@@ -11,6 +11,37 @@ from app.utils.helpers import to_str_id, to_str_ids
 router = APIRouter(dependencies=[Depends(get_current_admin)])
 
 
+def parse_object_id(value: str, message: str) -> ObjectId:
+    try:
+        return ObjectId(value)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=message) from exc
+
+
+async def log_finance_action(
+    db: AsyncIOMotorDatabase,
+    *,
+    admin: dict,
+    action: str,
+    commission_id: ObjectId,
+    old_status: str,
+    new_status: str,
+    amount: float,
+    remark: str,
+):
+    await db.finance_action_logs.insert_one({
+        "operator": admin.get("username", "admin"),
+        "action": action,
+        "target_type": "commission",
+        "target_id": commission_id,
+        "old_status": old_status,
+        "new_status": new_status,
+        "amount_change": amount,
+        "remark": remark,
+        "created_at": datetime.now(timezone.utc),
+    })
+
+
 @router.get("/overview")
 async def overview(db: AsyncIOMotorDatabase = Depends(get_db)):
     async def sum_by_status(st):
@@ -132,5 +163,88 @@ async def finance_logs(
     cursor = db.finance_action_logs.find().sort("created_at", -1).skip((page - 1) * page_size).limit(page_size)
     items = await cursor.to_list(length=page_size)
     total = await db.finance_action_logs.count_documents({})
+    return PageResponse(items=to_str_ids(items), total=total, page=page, page_size=page_size,
+                        pages=math.ceil(total / page_size) if total else 0)
+
+
+@router.put("/commission/{commission_id}/approve", response_model=MessageResponse)
+async def approve_commission(
+    commission_id: str,
+    admin: dict = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    oid = parse_object_id(commission_id, "Invalid commission id")
+    commission = await db.commission_logs.find_one({"_id": oid})
+    if not commission:
+        raise HTTPException(status_code=404, detail="Commission not found")
+    if commission.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="Only pending commissions can be approved")
+    await db.commission_logs.update_one({"_id": oid}, {"$set": {"status": "approved", "approved_at": datetime.now(timezone.utc)}})
+    await log_finance_action(
+        db,
+        admin=admin,
+        action="approve",
+        commission_id=oid,
+        old_status="pending",
+        new_status="approved",
+        amount=float(commission.get("amount", 0)),
+        remark="",
+    )
+    return MessageResponse(message="Commission approved")
+
+
+@router.put("/commission/{commission_id}/reject", response_model=MessageResponse)
+async def reject_commission(
+    commission_id: str,
+    payload: dict,
+    admin: dict = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    oid = parse_object_id(commission_id, "Invalid commission id")
+    commission = await db.commission_logs.find_one({"_id": oid})
+    if not commission:
+        raise HTTPException(status_code=404, detail="Commission not found")
+    if commission.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="Only pending commissions can be rejected")
+    reason = payload.get("reason", "").strip()
+    await db.commission_logs.update_one(
+        {"_id": oid},
+        {"$set": {"status": "rejected", "rejected_at": datetime.now(timezone.utc), "reject_reason": reason}},
+    )
+    await log_finance_action(
+        db,
+        admin=admin,
+        action="reject",
+        commission_id=oid,
+        old_status="pending",
+        new_status="rejected",
+        amount=float(commission.get("amount", 0)),
+        remark=reason,
+    )
+    return MessageResponse(message="Commission rejected")
+
+
+@router.get("/commissions", response_model=PageResponse)
+async def commissions(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status: str | None = None,
+    staff_id: str | None = None,
+    level: int | None = None,
+    type: str | None = None,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    query: dict = {}
+    if status:
+        query["status"] = status
+    if staff_id:
+        query["beneficiary_staff_id"] = parse_object_id(staff_id, "Invalid staff id")
+    if level is not None:
+        query["level"] = level
+    if type:
+        query["type"] = type
+    cursor = db.commission_logs.find(query).sort("created_at", -1).skip((page - 1) * page_size).limit(page_size)
+    items = await cursor.to_list(length=page_size)
+    total = await db.commission_logs.count_documents(query)
     return PageResponse(items=to_str_ids(items), total=total, page=page, page_size=page_size,
                         pages=math.ceil(total / page_size) if total else 0)

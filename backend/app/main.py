@@ -43,6 +43,16 @@ async def seed_settings():
         {"key": "commission_vip3", "value": 1.6, "group": "commission", "description": "VIP3 level 1 commission"},
         {"key": "commission_svip", "value": 2.0, "group": "commission", "description": "Super VIP level 1 commission"},
         {"key": "default_currency", "value": "PHP", "group": "general", "description": "Default currency"},
+        {"key": "vip_threshold_1", "value": 10, "group": "vip", "description": "VIP1 threshold"},
+        {"key": "vip_threshold_2", "value": 100, "group": "vip", "description": "VIP2 threshold"},
+        {"key": "vip_threshold_3", "value": 1000, "group": "vip", "description": "VIP3 threshold"},
+        {"key": "vip_threshold_svip", "value": 10000, "group": "vip", "description": "Super VIP threshold"},
+        {"key": "team_reward_100_threshold", "value": 100, "group": "team_reward", "description": "Team reward 100 threshold"},
+        {"key": "team_reward_100", "value": 300, "group": "team_reward", "description": "Team reward 100 amount"},
+        {"key": "team_reward_1000_threshold", "value": 1000, "group": "team_reward", "description": "Team reward 1000 threshold"},
+        {"key": "team_reward_1000", "value": 500, "group": "team_reward", "description": "Team reward 1000 amount"},
+        {"key": "team_reward_10000_threshold", "value": 10000, "group": "team_reward", "description": "Team reward 10000 threshold"},
+        {"key": "team_reward_10000", "value": 1000, "group": "team_reward", "description": "Team reward 10000 amount"},
     ]
     for item in defaults:
         await db.system_settings.update_one(
