@@ -72,9 +72,43 @@ export interface CommissionLog {
   source_staff_id: string;
   beneficiary_staff_id: string;
   level: number;
+  type: string;
+  rate: number;
+  vip_level_at_time: number;
   amount: number;
   currency: string;
   status: string;
+  created_at: string;
+}
+
+export interface VipUpgradeLog {
+  id: string;
+  staff_id: string;
+  from_level: number;
+  to_level: number;
+  trigger: "auto" | "manual";
+  total_valid_at_time: number;
+  created_at: string;
+}
+
+export interface TeamReward {
+  id: string;
+  staff_id: string;
+  milestone: number;
+  amount: number;
+  currency: string;
+  status: string;
+  created_at: string;
+}
+
+export interface PayoutAccount {
+  id: string;
+  staff_id: string;
+  type: "gcash" | "maya" | "bank" | "usdt" | "other";
+  account_name: string;
+  account_number: string;
+  bank_name: string;
+  is_default: boolean;
   created_at: string;
 }
 

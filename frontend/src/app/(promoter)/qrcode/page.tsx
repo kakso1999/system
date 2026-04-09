@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, QrCode, Copy } from "lucide-react";
+import { ArrowLeft, Copy } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import api from "@/lib/api";
 
 export default function QRCodePage() {
@@ -20,7 +21,7 @@ export default function QRCodePage() {
     }
   };
 
-  const qrUrl = qrData ? `${typeof window !== "undefined" ? window.location.origin : ""}/welcome/${qrData.invite_code}` : "";
+  const qrUrl = qrData && typeof window !== "undefined" ? `${window.location.origin}${qrData.qr_data}` : "";
 
   const copyLink = () => {
     navigator.clipboard.writeText(qrUrl);
@@ -52,9 +53,7 @@ export default function QRCodePage() {
         <div className="bg-surface-container-lowest rounded-2xl p-8 shadow-sm text-center">
           {/* QR Code display */}
           <div className="bg-white p-6 rounded-2xl inline-block mb-6 shadow-inner">
-            <div className="w-48 h-48 flex items-center justify-center bg-primary/5 rounded-xl">
-              <QrCode className="w-24 h-24 text-primary" />
-            </div>
+            <QRCodeSVG value={qrUrl || " "} size={192} bgColor="#ffffff" fgColor="#0d47a1" level="M" includeMargin />
           </div>
 
           <div className="space-y-3">
