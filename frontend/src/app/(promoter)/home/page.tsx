@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Menu, LogOut, Wallet, QrCode, Home, Users } from "lucide-react";
+import { Menu, LogOut, Wallet, QrCode } from "lucide-react";
 import api from "@/lib/api";
 import { clearAuth } from "@/lib/auth";
 
@@ -16,10 +16,102 @@ interface HomeData {
 }
 
 const VIP_LABELS = ["Regular", "VIP 1", "VIP 2", "VIP 3", "Super VIP"];
+const VIP_TARGETS = [0, 20, 60, 120, 240];
+
+interface VipProgress {
+  current_level: number;
+  current_valid: number;
+  next_level: number | null;
+  next_level_required: number;
+  remaining_valid: number;
+  progress_percent: number;
+}
+
+function toPoints(value: number) {
+  return `${value.toFixed(2)}P`;
+}
+
+function toNumber(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getDefaultVipProgress(staff: HomeData["staff"]): VipProgress {
+  const currentLevel = toNumber(staff.vip_level, 0);
+  const currentValid = toNumber(staff.stats.total_valid, 0);
+  if (currentLevel >= VIP_LABELS.length - 1) {
+    return {
+      current_level: VIP_LABELS.length - 1,
+      current_valid: currentValid,
+      next_level: null,
+      next_level_required: currentValid,
+      remaining_valid: 0,
+      progress_percent: 100,
+    };
+  }
+
+  const nextLevel = currentLevel + 1;
+  const target = VIP_TARGETS[nextLevel] ?? currentValid;
+  const remaining = Math.max(0, target - currentValid);
+  const progress = target > 0 ? Math.min(100, (currentValid / target) * 100) : 100;
+
+  return {
+    current_level: currentLevel,
+    current_valid: currentValid,
+    next_level: nextLevel,
+    next_level_required: target,
+    remaining_valid: remaining,
+    progress_percent: progress,
+  };
+}
+
+function normalizeVipProgress(raw: unknown, staff: HomeData["staff"]): VipProgress {
+  const fallback = getDefaultVipProgress(staff);
+  if (!raw || typeof raw !== "object") return fallback;
+
+  const data = raw as Record<string, unknown>;
+  const currentLevel = toNumber(data.current_level ?? data.vip_level, fallback.current_level);
+  const currentValid = toNumber(data.current_valid ?? data.total_valid, fallback.current_valid);
+  const nextLevelRaw = data.next_level;
+  const nextLevel = nextLevelRaw === null ? null : toNumber(nextLevelRaw, fallback.next_level ?? currentLevel + 1);
+  const nextRequired = toNumber(
+    data.next_level_required ?? data.next_required_valid ?? data.target_valid,
+    fallback.next_level_required
+  );
+  const remaining = toNumber(
+    data.remaining_valid,
+    nextLevel === null ? 0 : Math.max(0, nextRequired - currentValid)
+  );
+  const progress = toNumber(
+    data.progress_percent ?? data.progress,
+    nextLevel === null || nextRequired <= 0 ? 100 : (currentValid / nextRequired) * 100
+  );
+
+  if (nextLevel === null || currentLevel >= VIP_LABELS.length - 1) {
+    return {
+      current_level: Math.min(currentLevel, VIP_LABELS.length - 1),
+      current_valid: currentValid,
+      next_level: null,
+      next_level_required: currentValid,
+      remaining_valid: 0,
+      progress_percent: 100,
+    };
+  }
+
+  return {
+    current_level: currentLevel,
+    current_valid: currentValid,
+    next_level,
+    next_level_required: Math.max(nextRequired, 1),
+    remaining_valid: Math.max(remaining, 0),
+    progress_percent: Math.max(0, Math.min(progress, 100)),
+  };
+}
 
 export default function PromoterHomePage() {
   const router = useRouter();
   const [data, setData] = useState<HomeData | null>(null);
+  const [vipProgress, setVipProgress] = useState<VipProgress | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { loadHome(); }, []);
@@ -28,6 +120,12 @@ export default function PromoterHomePage() {
     try {
       const res = await api.get("/api/promoter/home");
       setData(res.data);
+      try {
+        const vipRes = await api.get("/api/promoter/vip-progress");
+        setVipProgress(normalizeVipProgress(vipRes.data, res.data.staff));
+      } catch {
+        setVipProgress(getDefaultVipProgress(res.data.staff));
+      }
     } catch {
       router.push("/staff-login");
     } finally {
@@ -40,9 +138,11 @@ export default function PromoterHomePage() {
   }
 
   const s = data.staff;
+  const vip = vipProgress ?? getDefaultVipProgress(s);
+  const nextLabel = vip.next_level !== null ? VIP_LABELS[vip.next_level] : "Max";
 
   return (
-    <div className="min-h-screen bg-surface pb-24">
+    <div className="min-h-screen bg-surface">
       <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
         <div className="flex justify-between items-center px-6 h-16 max-w-7xl mx-auto">
           <div className="flex items-center gap-3">
@@ -61,6 +161,30 @@ export default function PromoterHomePage() {
           <h2 className="text-3xl font-extrabold font-[var(--font-headline)] tracking-tight mt-1">My Performance</h2>
         </section>
 
+        <section className="bg-surface-container-lowest rounded-xl shadow-sm p-6 space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">VIP Progress</p>
+              <h3 className="text-2xl font-extrabold font-[var(--font-headline)] mt-1 text-primary">
+                {VIP_LABELS[vip.current_level] ?? `VIP ${vip.current_level}`}
+              </h3>
+            </div>
+            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+              Next: {nextLabel}
+            </span>
+          </div>
+          <div className="space-y-2">
+            <div className="h-2 w-full rounded-full bg-surface-variant overflow-hidden">
+              <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${vip.progress_percent}%` }} />
+            </div>
+            <p className="text-sm text-on-surface-variant">
+              {vip.remaining_valid > 0
+                ? `${vip.remaining_valid} more valid claims needed to reach ${nextLabel}.`
+                : "You are currently at the highest VIP level."}
+            </p>
+          </div>
+        </section>
+
         {/* Commission Card */}
         <section className="grid grid-cols-2 gap-4">
           <div className="col-span-2 bg-surface-container-lowest p-6 rounded-xl flex flex-col justify-between h-40">
@@ -72,7 +196,7 @@ export default function PromoterHomePage() {
             </div>
             <div>
               <div className="text-4xl font-extrabold font-[var(--font-headline)] text-primary">
-                ${s.stats.total_commission.toFixed(2)}
+                {toPoints(s.stats.total_commission)}
               </div>
               <div className="text-xs font-bold text-on-surface-variant mt-1">
                 {VIP_LABELS[s.vip_level]} Level
@@ -137,21 +261,6 @@ export default function PromoterHomePage() {
           </div>
         </section>
       </main>
-
-      {/* Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 w-full flex justify-around items-end pb-4 px-4 bg-white/80 backdrop-blur-xl z-50 rounded-t-[2rem] shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
-        <a href="/home" className="flex flex-col items-center justify-center text-primary py-3">
-          <Home className="w-6 h-6" />
-          <span className="text-[11px] font-bold uppercase tracking-widest mt-1">Home</span>
-        </a>
-        <a href="/qrcode" className="flex flex-col items-center justify-center bg-primary text-white rounded-full w-14 h-14 -mt-6 shadow-lg shadow-primary/20">
-          <QrCode className="w-6 h-6" />
-        </a>
-        <a href="/team" className="flex flex-col items-center justify-center text-slate-400 py-3 hover:text-primary">
-          <Users className="w-6 h-6" />
-          <span className="text-[11px] font-bold uppercase tracking-widest mt-1">Team</span>
-        </a>
-      </nav>
     </div>
   );
 }
