@@ -141,9 +141,16 @@ async def list_campaign_staff(
 ):
     cid = parse_object_id(campaign_id, "campaign_id")
     staff = await db.staff_users.find(
-        {"campaign_id": cid, "status": "active"}, {"password_hash": 0}
+        {"campaign_id": cid}, {"password_hash": 0}
     ).to_list(length=500)
-    return to_str_ids(staff)
+    result = []
+    for doc in staff:
+        item = to_str_id(doc)
+        for key in ("parent_id", "campaign_id"):
+            if isinstance(item.get(key), ObjectId):
+                item[key] = str(item[key])
+        result.append(item)
+    return result
 
 
 @router.delete("/{campaign_id}", response_model=MessageResponse)

@@ -3,9 +3,9 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.database import get_db
 from app.dependencies import get_current_admin
-from app.schemas.common import MessageResponse, TokenResponse
+from app.schemas.common import MessageResponse, TokenResponse, RefreshRequest
 from app.schemas.staff import ChangePasswordRequest, LoginRequest
-from app.utils.security import create_access_token, hash_password, verify_password
+from app.utils.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
 
 router = APIRouter()
 
@@ -22,7 +22,25 @@ async def login(
             detail="Invalid username or password",
         )
     token = create_access_token({"sub": str(admin["_id"]), "role": "admin"})
-    return TokenResponse(access_token=token, role="admin")
+    refresh = create_refresh_token({"sub": str(admin["_id"]), "role": "admin"})
+    return TokenResponse(access_token=token, refresh_token=refresh, role="admin")
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(
+    payload: RefreshRequest,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> TokenResponse:
+    data = decode_token(payload.refresh_token)
+    if not data or data.get("role") != "admin":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    from bson import ObjectId
+    admin = await db.admins.find_one({"_id": ObjectId(data["sub"])})
+    if not admin:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
+    token = create_access_token({"sub": str(admin["_id"]), "role": "admin"})
+    refresh_tok = create_refresh_token({"sub": str(admin["_id"]), "role": "admin"})
+    return TokenResponse(access_token=token, refresh_token=refresh_tok, role="admin")
 
 
 @router.post("/password", response_model=MessageResponse)

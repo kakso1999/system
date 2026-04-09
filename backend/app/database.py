@@ -47,6 +47,13 @@ async def create_indexes():
     await db.claims.create_index(
         [("device_fingerprint", 1), ("campaign_id", 1)]
     )
+    # Unique index to prevent race-condition double claims
+    await db.claims.create_index(
+        [("phone", 1), ("campaign_id", 1)],
+        unique=True,
+        partialFilterExpression={"status": "success", "phone": {"$gt": ""}},
+        name="unique_phone_campaign_success",
+    )
     # commission_logs
     await db.commission_logs.create_index(
         [("beneficiary_staff_id", 1), ("status", 1)]

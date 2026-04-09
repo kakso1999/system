@@ -22,6 +22,29 @@ const COLORS = [
   "#5c8bff", "#f395ee", "#618eff", "#e488df", "#0253cd", "#ffc69a",
 ];
 
+function generateDeviceFingerprint(): string {
+  const nav = window.navigator;
+  const screen = window.screen;
+  const raw = [
+    nav.userAgent,
+    nav.language,
+    screen.width + "x" + screen.height,
+    screen.colorDepth,
+    new Date().getTimezoneOffset(),
+    nav.hardwareConcurrency || "",
+    (nav as unknown as Record<string, unknown>).deviceMemory || "",
+    nav.maxTouchPoints || 0,
+  ].join("|");
+  // Simple hash
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const chr = raw.charCodeAt(i);
+    hash = ((hash << 5) - hash) + chr;
+    hash |= 0;
+  }
+  return "fp_" + Math.abs(hash).toString(36);
+}
+
 export default function WheelPage() {
   const params = useParams();
   const router = useRouter();
@@ -34,29 +57,43 @@ export default function WheelPage() {
   const [result, setResult] = useState<SpinResult | null>(null);
   const [rotation, setRotation] = useState(0);
   const [showResult, setShowResult] = useState(false);
+  const [deviceFp, setDeviceFp] = useState("");
 
   // Phone verification state
   const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState(["", "", "", ""]);
+  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [claiming, setClaiming] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0);
   const [claimResult, setClaimResult] = useState<{
     success: boolean; claim_id?: string; prize_type?: string;
     reward_code?: string; redirect_url?: string; message: string;
   } | null>(null);
 
   useEffect(() => {
+    setDeviceFp(generateDeviceFingerprint());
+  }, []);
+
+  useEffect(() => {
     if (code) loadWheel();
   }, [code]);
+
+  // OTP cooldown timer
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const timer = setInterval(() => setOtpCooldown(c => c - 1), 1000);
+    return () => clearInterval(timer);
+  }, [otpCooldown]);
 
   const loadWheel = async () => {
     try {
       const res = await api.get(`/api/claim/welcome/${code}`);
       setItems(res.data.wheel_items);
       setCampaignId(res.data.campaign.id);
+      setSmsEnabled(res.data.sms_enabled || false);
     } catch {
       router.push(`/welcome/${code}`);
     }
@@ -72,7 +109,6 @@ export default function WheelPage() {
     const center = size / 2;
     const radius = center - 10;
 
-    // Build segments: real items + "No Prize" for remaining %
     const totalPct = items.reduce((s, i) => s + (i.weight || 10), 0);
     const noPrizePct = Math.max(0, 100 - totalPct);
     const segments: { name: string; pct: number; color: string }[] = items.map((item, i) => ({
@@ -105,7 +141,6 @@ export default function WheelPage() {
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      // Text
       if (seg.pct >= 5) {
         ctx.save();
         ctx.translate(center, center);
@@ -123,7 +158,6 @@ export default function WheelPage() {
 
     ctx.restore();
 
-    // Center circle
     ctx.beginPath();
     ctx.arc(center, center, 30, 0, 2 * Math.PI);
     ctx.fillStyle = "#fff";
@@ -151,18 +185,15 @@ export default function WheelPage() {
       });
       setResult(res.data);
 
-      // Calculate target angle based on percentage segments
       const totalPct = items.reduce((s, i) => s + (i.weight || 10), 0);
       const noPrizePct = Math.max(0, 100 - totalPct);
       const targetIndex = res.data.result_index;
 
       let targetAngleDeg: number;
       if (targetIndex === -1) {
-        // No prize — land on the "No Prize" segment (at the end)
         const noPrizeStart = (totalPct / 100) * 360;
         targetAngleDeg = 360 - (noPrizeStart + (noPrizePct / 100) * 360 / 2);
       } else {
-        // Land on the winning item's segment center
         let angleBefore = 0;
         for (let i = 0; i < targetIndex; i++) {
           angleBefore += (items[i].weight || 10);
@@ -172,7 +203,6 @@ export default function WheelPage() {
       }
 
       const totalRotation = 360 * 8 + targetAngleDeg;
-
       let start: number | null = null;
       const duration = 5000;
       const startRotation = rotation % 360;
@@ -181,7 +211,6 @@ export default function WheelPage() {
         if (!start) start = timestamp;
         const elapsed = timestamp - start;
         const progress = Math.min(elapsed / duration, 1);
-        // Ease out cubic
         const eased = 1 - Math.pow(1 - progress, 3);
         setRotation(startRotation + totalRotation * eased);
 
@@ -206,9 +235,11 @@ export default function WheelPage() {
       const res = await api.post("/api/claim/verify-phone", { phone, campaign_id: campaignId });
       if (res.data.verified) {
         setPhoneVerified(true);
-      } else {
-        setSmsEnabled(true);
+      } else if (res.data.otp_sent) {
         setOtpSent(true);
+        setOtpCooldown(60);
+      } else {
+        alert(res.data.message);
       }
     } catch {
       alert("Verification failed");
@@ -219,7 +250,7 @@ export default function WheelPage() {
 
   const handleVerifyOtp = async () => {
     const otpCode = otp.join("");
-    if (otpCode.length !== 4) return;
+    if (otpCode.length !== 6) return;
     setVerifying(true);
     try {
       const res = await api.post("/api/claim/verify-otp", { phone, code: otpCode });
@@ -244,8 +275,7 @@ export default function WheelPage() {
         staff_code: code,
         wheel_item_id: result.wheel_item.id,
         phone,
-        ip: "",
-        device_fingerprint: "",
+        device_fingerprint: deviceFp,
       });
       setClaimResult(res.data);
       if (res.data.success && res.data.claim_id) {
@@ -264,9 +294,16 @@ export default function WheelPage() {
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
-    if (value && index < 3) {
+    if (value && index < 5) {
       const next = document.getElementById(`otp-${index + 1}`);
       next?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
+      const prev = document.getElementById(`otp-${index - 1}`);
+      prev?.focus();
     }
   };
 
@@ -298,7 +335,6 @@ export default function WheelPage() {
           <div className="absolute inset-0 bg-primary/10 rounded-full blur-3xl" />
           <div className="relative z-10 w-full h-full max-w-[320px] max-h-[320px] rounded-full p-2 bg-surface-container-lowest shadow-[0px_20px_40px_rgba(39,44,81,0.06)] border-[12px] border-surface-container">
             <canvas ref={canvasRef} width={280} height={280} className="w-full h-full rounded-full" />
-            {/* Indicator */}
             <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-30">
               <ChevronDown className="w-12 h-12 text-error drop-shadow-md" />
             </div>
@@ -318,7 +354,6 @@ export default function WheelPage() {
         {/* Result + Verification */}
         {showResult && result && (
           <div className="space-y-6">
-            {/* Prize Result or No Prize */}
             {result.wheel_item.type === "none" ? (
               <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm text-center">
                 <AlertCircle className="w-12 h-12 text-outline mb-3 mx-auto block" />
@@ -335,12 +370,6 @@ export default function WheelPage() {
                     You won: {result.wheel_item.display_name}!
                   </h3>
                   <p className="text-on-surface-variant text-sm">{result.wheel_item.display_text || "Complete verification to claim your prize"}</p>
-                  {result.wheel_item.type === "website" && result.wheel_item.redirect_url && (
-                    <a href={result.wheel_item.redirect_url} target="_blank" rel="noopener noreferrer"
-                      className="inline-block mt-4 bg-primary text-white px-6 py-3 rounded-full font-bold text-sm shadow-md shadow-primary/20 hover:shadow-lg transition-all">
-                      Go to Prize Website
-                    </a>
-                  )}
                 </div>
 
             {/* Phone Verification */}
@@ -364,7 +393,7 @@ export default function WheelPage() {
                           type="tel" value={phone}
                           onChange={(e) => setPhone(e.target.value)}
                           placeholder="639171234567"
-                          disabled={phoneVerified}
+                          disabled={phoneVerified || otpSent}
                           className="w-full bg-surface-container-low border-none rounded-xl py-4 pl-10 pr-4 text-on-surface font-semibold focus:ring-2 focus:ring-primary/40 transition-all placeholder:text-outline/50 disabled:opacity-60"
                         />
                       </div>
@@ -376,19 +405,21 @@ export default function WheelPage() {
                         disabled={verifying || !phone}
                         className="w-full bg-surface-container-highest text-primary font-[var(--font-headline)] font-extrabold py-4 rounded-xl hover:bg-primary hover:text-white transition-all active:scale-[0.98] disabled:opacity-60"
                       >
-                        {verifying ? "VERIFYING..." : "SEND VERIFICATION CODE"}
+                        {verifying ? "SENDING..." : (smsEnabled ? "SEND VERIFICATION CODE" : "VERIFY PHONE")}
                       </button>
                     )}
 
-                    {otpSent && smsEnabled && !phoneVerified && (
+                    {otpSent && !phoneVerified && (
                       <>
                         <div>
-                          <label className="block text-xs font-bold text-outline uppercase tracking-widest mb-2 ml-1">OTP Code</label>
-                          <div className="grid grid-cols-4 gap-3">
+                          <label className="block text-xs font-bold text-outline uppercase tracking-widest mb-2 ml-1">Verification Code (6 digits)</label>
+                          <div className="grid grid-cols-6 gap-2">
                             {otp.map((digit, i) => (
                               <input
-                                key={i} id={`otp-${i}`} type="text" maxLength={1}
-                                value={digit} onChange={(e) => handleOtpChange(i, e.target.value)}
+                                key={i} id={`otp-${i}`} type="text" inputMode="numeric" maxLength={1}
+                                value={digit}
+                                onChange={(e) => handleOtpChange(i, e.target.value)}
+                                onKeyDown={(e) => handleOtpKeyDown(i, e)}
                                 className="w-full bg-surface-container-low border-none rounded-xl py-4 text-center font-bold text-xl text-primary focus:ring-2 focus:ring-primary/40"
                               />
                             ))}
@@ -396,10 +427,17 @@ export default function WheelPage() {
                         </div>
                         <button
                           onClick={handleVerifyOtp}
-                          disabled={verifying}
+                          disabled={verifying || otp.join("").length !== 6}
                           className="w-full bg-surface-container-highest text-primary font-[var(--font-headline)] font-extrabold py-4 rounded-xl hover:bg-primary hover:text-white transition-all disabled:opacity-60"
                         >
-                          VERIFY OTP
+                          {verifying ? "VERIFYING..." : "VERIFY CODE"}
+                        </button>
+                        <button
+                          onClick={handleVerifyPhone}
+                          disabled={otpCooldown > 0 || verifying}
+                          className="w-full text-sm text-on-surface-variant font-semibold py-2 hover:text-primary transition-colors disabled:opacity-40"
+                        >
+                          {otpCooldown > 0 ? `Resend in ${otpCooldown}s` : "Resend Code"}
                         </button>
                       </>
                     )}
@@ -410,7 +448,7 @@ export default function WheelPage() {
                         disabled={claiming}
                         className="w-full bg-gradient-to-r from-secondary to-secondary-dim text-white font-[var(--font-headline)] font-extrabold py-5 rounded-full shadow-lg shadow-secondary/20 active:scale-[0.97] transition-all disabled:opacity-60"
                       >
-                        {claiming ? "CLAIMING..." : "VERIFY & CLAIM REWARD"}
+                        {claiming ? "CLAIMING..." : "CLAIM REWARD"}
                       </button>
                     )}
                   </div>

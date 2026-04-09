@@ -9,13 +9,13 @@ from pymongo.errors import DuplicateKeyError
 
 from app.database import get_db
 from app.dependencies import get_current_staff
-from app.schemas.common import MessageResponse, TokenResponse
+from app.schemas.common import MessageResponse, TokenResponse, RefreshRequest
 from app.schemas.staff import (
     ChangePasswordRequest,
     LoginRequest,
     StaffRegisterRequest,
 )
-from app.utils.security import create_access_token, hash_password, verify_password
+from app.utils.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
 
 router = APIRouter()
 
@@ -132,7 +132,24 @@ async def login(
     if staff.get("status") != "active":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is not active")
     token = create_access_token({"sub": str(staff["_id"]), "role": "staff"})
-    return TokenResponse(access_token=token, role="staff")
+    refresh = create_refresh_token({"sub": str(staff["_id"]), "role": "staff"})
+    return TokenResponse(access_token=token, refresh_token=refresh, role="staff")
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(
+    payload: RefreshRequest,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> TokenResponse:
+    data = decode_token(payload.refresh_token)
+    if not data or data.get("role") != "staff":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    staff = await db.staff_users.find_one({"_id": ObjectId(data["sub"])})
+    if not staff or staff.get("status") != "active":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Staff not found or inactive")
+    token = create_access_token({"sub": str(staff["_id"]), "role": "staff"})
+    refresh_tok = create_refresh_token({"sub": str(staff["_id"]), "role": "staff"})
+    return TokenResponse(access_token=token, refresh_token=refresh_tok, role="staff")
 
 
 @router.post("/register", response_model=MessageResponse)

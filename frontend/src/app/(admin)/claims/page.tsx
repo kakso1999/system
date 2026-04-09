@@ -10,6 +10,9 @@ export default function ClaimsPage() {
   const [page, setPage] = useState(1);
   const [phoneFilter, setPhoneFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [ipFilter, setIpFilter] = useState("");
+  const [deviceFilter, setDeviceFilter] = useState("");
+  const [prizeTypeFilter, setPrizeTypeFilter] = useState("");
   const [loading, setLoading] = useState(true);
 
   const loadClaims = useCallback(async () => {
@@ -18,6 +21,9 @@ export default function ClaimsPage() {
       const params: Record<string, string | number> = { page, page_size: 20 };
       if (phoneFilter) params.phone = phoneFilter;
       if (statusFilter) params.status = statusFilter;
+      if (ipFilter) params.ip = ipFilter;
+      if (deviceFilter) params.device_fingerprint = deviceFilter;
+      if (prizeTypeFilter) params.prize_type = prizeTypeFilter;
       const res = await api.get<PageResponse<Claim>>("/api/admin/claims", { params });
       setClaims(res.data.items);
       setTotal(res.data.total);
@@ -26,7 +32,7 @@ export default function ClaimsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, phoneFilter, statusFilter]);
+  }, [page, phoneFilter, statusFilter, ipFilter, deviceFilter, prizeTypeFilter]);
 
   useEffect(() => { loadClaims(); }, [loadClaims]);
 
@@ -45,6 +51,13 @@ export default function ClaimsPage() {
     );
   };
 
+  const resetFilters = () => {
+    setPhoneFilter(""); setStatusFilter(""); setIpFilter("");
+    setDeviceFilter(""); setPrizeTypeFilter(""); setPage(1);
+  };
+
+  const hasFilters = phoneFilter || statusFilter || ipFilter || deviceFilter || prizeTypeFilter;
+
   return (
     <div className="space-y-6">
       <div>
@@ -52,41 +65,68 @@ export default function ClaimsPage() {
         <p className="text-on-surface-variant mt-1">共 {total} 条记录</p>
       </div>
 
-      <div className="flex gap-3">
-        <input type="text" placeholder="搜索手机号..." value={phoneFilter}
-          onChange={(e) => { setPhoneFilter(e.target.value); setPage(1); }}
-          className="flex-1 bg-surface-container-lowest border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/40"
-        />
-        <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-          className="bg-surface-container-lowest border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/40"
-        >
-          <option value="">全部状态</option>
-          <option value="success">成功</option>
-          <option value="failed">失败</option>
-          <option value="blocked">拦截</option>
-        </select>
+      {/* Filters */}
+      <div className="bg-surface-container-lowest rounded-xl p-4 shadow-sm space-y-3">
+        <div className="flex gap-3">
+          <input type="text" placeholder="搜索手机号..." value={phoneFilter}
+            onChange={(e) => { setPhoneFilter(e.target.value); setPage(1); }}
+            className="flex-1 bg-surface-container-low border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/40"
+          />
+          <input type="text" placeholder="搜索 IP..." value={ipFilter}
+            onChange={(e) => { setIpFilter(e.target.value); setPage(1); }}
+            className="flex-1 bg-surface-container-low border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/40"
+          />
+        </div>
+        <div className="flex gap-3">
+          <input type="text" placeholder="搜索设备指纹..." value={deviceFilter}
+            onChange={(e) => { setDeviceFilter(e.target.value); setPage(1); }}
+            className="flex-1 bg-surface-container-low border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/40"
+          />
+          <select value={prizeTypeFilter} onChange={(e) => { setPrizeTypeFilter(e.target.value); setPage(1); }}
+            className="bg-surface-container-low border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/40"
+          >
+            <option value="">全部奖项</option>
+            <option value="onsite">现场奖</option>
+            <option value="website">网站奖</option>
+          </select>
+          <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+            className="bg-surface-container-low border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/40"
+          >
+            <option value="">全部状态</option>
+            <option value="success">成功</option>
+            <option value="failed">失败</option>
+            <option value="blocked">拦截</option>
+          </select>
+          {hasFilters && (
+            <button onClick={resetFilters}
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-error hover:bg-error/10 transition-colors whitespace-nowrap">
+              清除筛选
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-x-auto">
-        <table className="w-full text-sm min-w-[800px]">
+        <table className="w-full text-sm min-w-[900px]">
           <thead>
             <tr className="border-b border-surface-container-high">
-              {["时间", "手机号", "IP", "奖项类型", "奖励码", "状态", "风控命中"].map((h) => (
+              {["时间", "手机号", "IP", "设备指纹", "奖项类型", "奖励码", "状态", "风控命中"].map((h) => (
                 <th key={h} className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} className="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr>
+              <tr><td colSpan={8} className="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr>
             ) : claims.length === 0 ? (
-              <tr><td colSpan={7} className="px-6 py-8 text-center text-on-surface-variant">暂无数据</td></tr>
+              <tr><td colSpan={8} className="px-6 py-8 text-center text-on-surface-variant">暂无数据</td></tr>
             ) : (
               claims.map((c) => (
                 <tr key={c.id} className="border-b border-surface-container-high/50 hover:bg-surface-container-low/50 transition-colors">
                   <td className="px-6 py-4 text-xs text-on-surface-variant">{new Date(c.created_at).toLocaleString()}</td>
                   <td className="px-6 py-4 font-mono text-xs">{c.phone}</td>
                   <td className="px-6 py-4 font-mono text-xs">{c.ip}</td>
+                  <td className="px-6 py-4 font-mono text-xs max-w-[100px] truncate" title={c.device_fingerprint}>{c.device_fingerprint || "-"}</td>
                   <td className="px-6 py-4">
                     <span className={`px-2 py-1 rounded-full text-xs font-bold ${c.prize_type === "website" ? "bg-primary/10 text-primary" : "bg-secondary-container text-on-secondary-container"}`}>
                       {c.prize_type === "website" ? "网站奖" : "现场奖"}

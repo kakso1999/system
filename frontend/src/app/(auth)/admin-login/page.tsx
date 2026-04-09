@@ -17,7 +17,7 @@ export default function AdminLoginPage() {
     setLoading(true);
     try {
       const res = await api.post("/api/auth/admin/login", { username, password });
-      setAuth(res.data.access_token, "admin");
+      setAuth(res.data.access_token, "admin", res.data.refresh_token);
       window.location.href = "/dashboard";
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: string } } };

@@ -23,6 +23,8 @@ async def list_claims(
     page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
     campaign_id: str | None = None, staff_id: str | None = None,
     phone: str | None = None, status: str | None = None,
+    ip: str | None = None, device_fingerprint: str | None = None,
+    prize_type: str | None = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     query: dict = {}
@@ -34,6 +36,12 @@ async def list_claims(
         query["phone"] = {"$regex": phone, "$options": "i"}
     if status:
         query["status"] = status
+    if ip:
+        query["ip"] = {"$regex": ip, "$options": "i"}
+    if device_fingerprint:
+        query["device_fingerprint"] = {"$regex": device_fingerprint, "$options": "i"}
+    if prize_type:
+        query["prize_type"] = prize_type
     cursor = db.claims.find(query).sort("created_at", -1).skip((page - 1) * page_size).limit(page_size)
     items = await cursor.to_list(length=page_size)
     total = await db.claims.count_documents(query)

@@ -15,12 +15,20 @@ async def get_risk_settings(db: AsyncIOMotorDatabase = Depends(get_db)):
     return {"settings": [{"key": s["key"], "value": s["value"], "description": s.get("description", "")} for s in settings]}
 
 
+ALLOWED_RISK_KEYS = {
+    "risk_phone_unique", "risk_ip_unique",
+    "risk_device_unique", "sms_verification",
+}
+
+
 @router.put("/")
 async def update_risk_setting(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
+    if payload.get("key") not in ALLOWED_RISK_KEYS:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail="Unknown risk control setting")
     await db.system_settings.update_one(
         {"key": payload["key"]},
         {"$set": {"value": payload["value"]}},
-        upsert=True,
     )
     return MessageResponse(message="Setting updated")
 

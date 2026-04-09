@@ -1,14 +1,18 @@
-import math
-import random
+import re
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.errors import DuplicateKeyError
 
 from app.database import get_db
+from app.utils.sms import send_sms
 
 router = APIRouter()
+
+PHONE_RE = re.compile(r"^\+?[1-9]\d{6,14}$")
 
 
 async def get_setting(db, key: str):
@@ -16,19 +20,70 @@ async def get_setting(db, key: str):
     return doc["value"] if doc else None
 
 
-async def check_risk(db, phone, ip, device_fp, campaign_id) -> list[str]:
+def safe_object_id(value):
+    """Convert to ObjectId safely, return None on failure."""
+    if not value:
+        return None
+    try:
+        return ObjectId(value) if isinstance(value, str) else value
+    except Exception:
+        return None
+
+
+async def log_risk(db, campaign_id, phone, ip, device_fp, rule, reason):
+    await db.risk_logs.insert_one({
+        "campaign_id": safe_object_id(campaign_id),
+        "phone": phone,
+        "ip": ip,
+        "device_fingerprint": device_fp,
+        "type": rule,
+        "reason": reason,
+        "created_at": datetime.now(timezone.utc),
+    })
+
+
+async def check_risk(db, phone, ip, device_fp, campaign_id) -> list[dict]:
+    """Check all risk rules. Returns list of {rule, reason} dicts."""
     hits = []
-    cid = ObjectId(campaign_id)
+    cid = safe_object_id(campaign_id)
+
+    # 1. Phone unique
     if await get_setting(db, "risk_phone_unique"):
         if await db.claims.find_one({"phone": phone, "campaign_id": cid, "status": "success"}):
-            hits.append("phone_duplicate")
+            hits.append({"rule": "phone_duplicate", "reason": f"Phone {phone[-4:]} already claimed in this campaign"})
+
+    # 2. IP unique
     if await get_setting(db, "risk_ip_unique") and ip:
         if await db.claims.find_one({"ip": ip, "campaign_id": cid, "status": "success"}):
-            hits.append("ip_duplicate")
+            hits.append({"rule": "ip_duplicate", "reason": f"IP {ip} already claimed in this campaign"})
+
+    # 3. Device fingerprint unique
     if await get_setting(db, "risk_device_unique") and device_fp:
         if await db.claims.find_one({"device_fingerprint": device_fp, "campaign_id": cid, "status": "success"}):
-            hits.append("device_duplicate")
+            hits.append({"rule": "device_duplicate", "reason": "Device already claimed in this campaign"})
+
+    # 4. Rate limit: max 5 claims per IP per hour per campaign
+    if ip:
+        one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+        recent_count = await db.claims.count_documents({
+            "ip": ip, "campaign_id": cid, "created_at": {"$gte": one_hour_ago}
+        })
+        if recent_count >= 5:
+            hits.append({"rule": "rate_limit", "reason": f"IP {ip} exceeded 5 claims per hour"})
+
     return hits
+
+
+def validate_phone(phone: str) -> str:
+    """Validate and normalize phone number. Raises HTTPException if invalid."""
+    phone = phone.strip()
+    if not phone:
+        raise HTTPException(status_code=422, detail="Phone number is required")
+    if not PHONE_RE.match(phone):
+        raise HTTPException(status_code=422, detail="Invalid phone number format")
+    if not phone.startswith("+"):
+        phone = f"+{phone}"
+    return phone
 
 
 @router.get("/welcome/{staff_code}")
@@ -42,7 +97,6 @@ async def welcome(staff_code: str, request: Request, db: AsyncIOMotorDatabase = 
     if not campaign:
         raise HTTPException(status_code=404, detail="No active campaign")
 
-    # Record scan: increment staff total_scans and log it
     await db.staff_users.update_one({"_id": staff["_id"]}, {"$inc": {"stats.total_scans": 1}})
     await db.scan_logs.insert_one({
         "staff_id": staff["_id"],
@@ -54,13 +108,16 @@ async def welcome(staff_code: str, request: Request, db: AsyncIOMotorDatabase = 
     items = await db.wheel_items.find(
         {"campaign_id": campaign["_id"], "enabled": True}
     ).sort("sort_order", 1).to_list(length=50)
+
+    sms_on = await get_setting(db, "sms_verification")
+
     return {
         "staff_name": staff["name"],
+        "sms_enabled": bool(sms_on),
         "campaign": {
             "id": str(campaign["_id"]), "name": campaign["name"],
             "description": campaign.get("description", ""),
             "rules_text": campaign.get("rules_text", ""),
-            "prize_url": campaign.get("prize_url", ""),
         },
         "wheel_items": [
             {"id": str(i["_id"]), "display_name": i["display_name"],
@@ -72,23 +129,43 @@ async def welcome(staff_code: str, request: Request, db: AsyncIOMotorDatabase = 
 
 
 @router.post("/spin")
-async def spin(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
-    cid = ObjectId(payload["campaign_id"])
+async def spin(payload: dict, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    staff_code = payload.get("staff_code", "")
+    cid_str = payload.get("campaign_id", "")
+
+    # Validate staff_code matches campaign
+    if staff_code:
+        staff = await db.staff_users.find_one({"invite_code": staff_code.upper()})
+        if staff and staff.get("campaign_id"):
+            expected_cid = str(staff["campaign_id"])
+            if cid_str != expected_cid:
+                raise HTTPException(status_code=400, detail="Campaign does not match promoter")
+
+    cid = ObjectId(cid_str)
     items = await db.wheel_items.find(
         {"campaign_id": cid, "enabled": True}
     ).sort("sort_order", 1).to_list(length=50)
     if not items:
         raise HTTPException(status_code=400, detail="No wheel items")
-    # Each item's weight = percentage chance. Remainder = no prize.
+
     total_pct = sum(i.get("weight", 10) for i in items)
     no_prize_pct = max(0, 100 - total_pct)
-    # Build choices: real items + "no_prize" slot
     all_weights = [i.get("weight", 10) for i in items]
     if no_prize_pct > 0:
         all_weights.append(no_prize_pct)
-    chosen = random.choices(range(len(all_weights)), weights=all_weights, k=1)[0]
+
+    # Use secrets for randomness
+    total_weight = sum(all_weights)
+    rand_val = secrets.randbelow(total_weight)
+    chosen = 0
+    cumulative = 0
+    for i, w in enumerate(all_weights):
+        cumulative += w
+        if rand_val < cumulative:
+            chosen = i
+            break
+
     if chosen >= len(items):
-        # No prize
         return {
             "result_index": -1,
             "wheel_item": {
@@ -108,29 +185,106 @@ async def spin(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
 
 
 @router.post("/verify-phone")
-async def verify_phone(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
+async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    phone = payload.get("phone", "").strip()
+    campaign_id = payload.get("campaign_id", "")
+
     sms_on = await get_setting(db, "sms_verification")
-    if sms_on:
-        code = f"{random.randint(100000, 999999)}"
-        await db.otp_records.insert_one({
-            "phone": payload["phone"], "code": code, "used": False,
-            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
-            "created_at": datetime.now(timezone.utc),
-        })
-        return {"verified": False, "message": "OTP sent"}
-    return {"verified": True, "message": "Phone recorded"}
+    if not sms_on:
+        # Still validate phone format even when SMS is off
+        if phone and not PHONE_RE.match(phone):
+            return {"verified": False, "message": "Invalid phone number format"}
+        return {"verified": True, "message": "Phone recorded"}
+
+    # Validate phone format
+    phone = validate_phone(phone)
+
+    ip = request.client.host if request.client else ""
+
+    # Rate limit: max 3 OTPs per phone in 10 minutes
+    ten_min_ago = datetime.now(timezone.utc) - timedelta(minutes=10)
+    recent_otp_count = await db.otp_records.count_documents({
+        "phone": phone, "created_at": {"$gte": ten_min_ago}
+    })
+    if recent_otp_count >= 3:
+        await log_risk(db, campaign_id, phone, ip, "",
+                       "otp_rate_limit", f"Phone {phone[-4:]} requested too many OTPs")
+        return {"verified": False, "message": "Too many requests. Please wait a few minutes."}
+
+    # Rate limit: max 10 OTP requests per IP per hour
+    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    ip_otp_count = await db.otp_records.count_documents({
+        "ip": ip, "created_at": {"$gte": one_hour_ago}
+    })
+    if ip_otp_count >= 10:
+        await log_risk(db, campaign_id, phone, ip, "",
+                       "otp_ip_rate_limit", f"IP {ip} too many OTP requests")
+        return {"verified": False, "message": "Too many requests from this network."}
+
+    # Generate 6-digit OTP using cryptographically secure random
+    code = str(secrets.randbelow(900000) + 100000)
+
+    # Send via Tencent Cloud SMS first, only record if successful
+    sms_result = send_sms(phone, code, "10")
+    if not sms_result["success"]:
+        return {"verified": False, "message": f"SMS send failed: {sms_result['message']}",
+                "sms_error": True}
+
+    # Record OTP only after successful send (HIGH-2 fix)
+    now = datetime.now(timezone.utc)
+    await db.otp_records.insert_one({
+        "phone": phone, "code": code, "used": False,
+        "attempts": 0,
+        "campaign_id": safe_object_id(campaign_id),
+        "ip": ip,
+        "expires_at": now + timedelta(minutes=10),
+        "created_at": now,
+    })
+
+    return {"verified": False, "message": "OTP sent", "otp_sent": True}
 
 
 @router.post("/verify-otp")
 async def verify_otp(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
+    phone = payload.get("phone", "").strip()
+    otp_code = payload.get("code", "").strip()
+    if not phone or not otp_code:
+        return {"verified": False, "message": "Phone and OTP code are required"}
+
     now = datetime.now(timezone.utc)
-    record = await db.otp_records.find_one(
-        {"phone": payload["phone"], "used": False, "expires_at": {"$gt": now}},
+
+    # Check if the latest OTP has too many failed attempts
+    latest = await db.otp_records.find_one(
+        {"phone": phone, "used": False, "expires_at": {"$gt": now}},
         sort=[("created_at", -1)],
     )
-    if not record or record["code"] != payload["code"]:
+    if not latest:
         return {"verified": False, "message": "Invalid or expired OTP"}
-    await db.otp_records.update_one({"_id": record["_id"]}, {"$set": {"used": True}})
+
+    if latest.get("attempts", 0) >= 5:
+        # Burn the OTP after 5 failed attempts (CRIT-3 fix)
+        await db.otp_records.update_one({"_id": latest["_id"]}, {"$set": {"used": True}})
+        return {"verified": False, "message": "Too many failed attempts. Please request a new code."}
+
+    # Atomic check-and-consume OTP (CRIT-4 fix)
+    record = await db.otp_records.find_one_and_update(
+        {
+            "_id": latest["_id"],
+            "code": otp_code,
+            "used": False,
+            "expires_at": {"$gt": now},
+        },
+        {"$set": {"used": True, "verified_at": now}},
+    )
+    if not record:
+        # Wrong code — increment attempt counter
+        await db.otp_records.update_one(
+            {"_id": latest["_id"]},
+            {"$inc": {"attempts": 1}},
+        )
+        remaining = 5 - latest.get("attempts", 0) - 1
+        return {"verified": False, "message": f"Invalid OTP. {remaining} attempts remaining."}
+
     return {"verified": True, "message": "Verified"}
 
 
@@ -138,22 +292,41 @@ async def verify_otp(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
 async def complete(payload: dict, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
     cid = ObjectId(payload["campaign_id"])
     wid = ObjectId(payload["wheel_item_id"])
-    phone = payload["phone"]
-    ip = payload.get("ip") or (request.client.host if request.client else "")
+    phone = validate_phone(payload.get("phone", ""))
+    ip = request.client.host if request.client else ""
     device_fp = payload.get("device_fingerprint", "")
     staff = await db.staff_users.find_one({"invite_code": payload["staff_code"].upper()})
     if not staff:
         raise HTTPException(status_code=404, detail="Promoter not found")
 
+    # SMS verification check (CRIT-2 fix: bind to campaign_id)
+    sms_on = await get_setting(db, "sms_verification")
+    if sms_on:
+        five_min_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
+        verified_otp = await db.otp_records.find_one({
+            "phone": phone,
+            "campaign_id": cid,
+            "used": True,
+            "verified_at": {"$gte": five_min_ago},
+        })
+        if not verified_otp:
+            await log_risk(db, payload["campaign_id"], phone, ip, device_fp,
+                           "sms_not_verified", "Attempted claim without SMS verification")
+            return {"success": False, "message": "Phone number not verified. Please complete SMS verification first."}
+
+    # Risk control checks
     hits = await check_risk(db, phone, ip, device_fp, payload["campaign_id"])
     if hits:
         for h in hits:
-            await db.risk_logs.insert_one({
-                "campaign_id": cid, "phone": phone, "ip": ip,
-                "device_fingerprint": device_fp, "rule_triggered": h,
-                "action": "blocked", "created_at": datetime.now(timezone.utc),
-            })
-        return {"success": False, "message": "Already claimed. Each person can only claim once."}
+            await log_risk(db, payload["campaign_id"], phone, ip, device_fp, h["rule"], h["reason"])
+        rule_messages = {
+            "phone_duplicate": "This phone number has already claimed a prize.",
+            "ip_duplicate": "A prize has already been claimed from this network.",
+            "device_duplicate": "A prize has already been claimed from this device.",
+            "rate_limit": "Too many requests. Please try again later.",
+        }
+        msg = rule_messages.get(hits[0]["rule"], "Already claimed. Each person can only claim once.")
+        return {"success": False, "message": msg}
 
     item = await db.wheel_items.find_one({"_id": wid})
     if not item:
@@ -184,7 +357,13 @@ async def complete(payload: dict, request: Request, db: AsyncIOMotorDatabase = D
         "redirected": False, "status": "success", "risk_hit": [],
         "created_at": datetime.now(timezone.utc),
     }
-    result = await db.claims.insert_one(claim)
+
+    # CRIT-1 fix: catch DuplicateKeyError from unique index
+    try:
+        result = await db.claims.insert_one(claim)
+    except DuplicateKeyError:
+        return {"success": False, "message": "This phone number has already claimed a prize."}
+
     await db.staff_users.update_one(
         {"_id": staff["_id"]},
         {"$inc": {"stats.total_valid": 1}},

@@ -69,12 +69,14 @@ export default function CampaignsPage() {
     setSelected(c);
     setModal("staff");
     try {
-      const [staffRes, boundRes] = await Promise.all([
-        api.get<PageResponse<Staff>>("/api/admin/staff/", { params: { page: 1, page_size: 100 } }),
-        api.get<Staff[]>(`/api/admin/campaigns/${c.id}/staff`),
-      ]);
+      const staffRes = await api.get<PageResponse<Staff>>("/api/admin/staff/", { params: { page: 1, page_size: 100 } });
       setAllStaff(staffRes.data.items);
-      setSelectedStaffIds(boundRes.data.map((s: Staff) => s.id));
+      try {
+        const boundRes = await api.get<Staff[]>(`/api/admin/campaigns/${c.id}/staff`);
+        setSelectedStaffIds(boundRes.data.map((s: Staff) => s.id));
+      } catch {
+        setSelectedStaffIds([]);
+      }
     } catch { setAllStaff([]); setSelectedStaffIds([]); }
   };
 
@@ -487,26 +489,55 @@ export default function CampaignsPage() {
               </h2>
               <button onClick={() => setModal(null)} className="text-outline hover:text-on-surface text-2xl">&times;</button>
             </div>
-            <p className="text-sm text-on-surface-variant mb-4">已选 {selectedStaffIds.length} / {allStaff.length} 人</p>
-            <div className="space-y-2 max-h-96 overflow-auto">
-              {allStaff.map(s => (
-                <label key={s.id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${selectedStaffIds.includes(s.id) ? "bg-primary/10" : "bg-surface-container-low hover:bg-surface-container"}`}>
-                  <input type="checkbox" checked={selectedStaffIds.includes(s.id)} onChange={() => toggleStaffSelect(s.id)}
-                    className="w-4 h-4 rounded border-outline text-primary focus:ring-primary/20" />
-                  <div>
-                    <p className="font-semibold text-sm">{s.name} <span className="text-xs text-outline ml-1">{s.staff_no}</span></p>
-                    <p className="text-xs text-on-surface-variant">{s.phone}</p>
-                  </div>
-                </label>
-              ))}
-              {allStaff.length === 0 && <p className="text-center text-on-surface-variant py-4">暂无地推员</p>}
-            </div>
-            <div className="flex gap-3 pt-6">
+
+            {/* Already bound staff */}
+            {selectedStaffIds.length > 0 && (
+              <div className="mb-5">
+                <h3 className="text-sm font-bold text-on-surface-variant uppercase tracking-wider mb-2">已绑定 ({selectedStaffIds.length}人)</h3>
+                <div className="space-y-2">
+                  {allStaff.filter(s => selectedStaffIds.includes(s.id)).map(s => (
+                    <div key={s.id} className="flex items-center justify-between p-3 rounded-xl bg-primary/10">
+                      <div>
+                        <p className="font-semibold text-sm">{s.name} <span className="text-xs text-outline ml-1">{s.staff_no}</span></p>
+                        <p className="text-xs text-on-surface-variant">{s.phone}</p>
+                      </div>
+                      <button onClick={() => toggleStaffSelect(s.id)}
+                        className="p-1.5 rounded-lg text-error hover:bg-error/10 transition-colors" title="移除">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Unbound staff to add */}
+            {allStaff.filter(s => !selectedStaffIds.includes(s.id)).length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-bold text-on-surface-variant uppercase tracking-wider mb-2">可添加</h3>
+                <div className="space-y-2 max-h-52 overflow-auto">
+                  {allStaff.filter(s => !selectedStaffIds.includes(s.id)).map(s => (
+                    <label key={s.id} className="flex items-center gap-3 p-3 rounded-xl cursor-pointer bg-surface-container-low hover:bg-surface-container transition-colors">
+                      <input type="checkbox" checked={false} onChange={() => toggleStaffSelect(s.id)}
+                        className="w-4 h-4 rounded border-outline text-primary focus:ring-primary/20" />
+                      <div>
+                        <p className="font-semibold text-sm">{s.name} <span className="text-xs text-outline ml-1">{s.staff_no}</span></p>
+                        <p className="text-xs text-on-surface-variant">{s.phone}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {allStaff.length === 0 && <p className="text-center text-on-surface-variant py-4">暂无地推员</p>}
+
+            <div className="flex gap-3 pt-4">
               <button onClick={() => setModal(null)}
                 className="flex-1 py-3 rounded-full border border-outline-variant text-on-surface-variant font-bold text-sm">取消</button>
               <button onClick={saveStaffBinding}
                 className="flex-1 bg-primary text-on-primary py-3 rounded-full font-bold text-sm shadow-md shadow-primary/20">
-                确认绑定
+                确认保存
               </button>
             </div>
           </div>
