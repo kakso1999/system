@@ -41,7 +41,11 @@ async def create_indexes():
     await db.reward_codes.create_index("code", unique=True)
     await db.reward_codes.create_index([("campaign_id", 1), ("status", 1)])
     # claims
-    await db.claims.create_index([("phone", 1), ("campaign_id", 1)])
+    try:
+        await db.claims.drop_index("phone_1_campaign_id_1")
+    except Exception:
+        pass
+    await db.claims.create_index([("phone", 1), ("campaign_id", 1), ("status", 1)])
     await db.claims.create_index("staff_id")
     await db.claims.create_index([("ip", 1), ("campaign_id", 1)])
     await db.claims.create_index(

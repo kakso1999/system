@@ -249,6 +249,8 @@ async def create_withdrawal(
         amount = float(payload.get("amount", 0))
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail="Invalid amount") from exc
+    if not math.isfinite(amount):
+        raise HTTPException(status_code=400, detail="Invalid amount")
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Withdrawal amount must be greater than 0")
     payout_account_id = parse_object_id(payload.get("payout_account_id", ""), "Invalid payout account id")

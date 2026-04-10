@@ -116,8 +116,13 @@ async def bind_staff_to_campaign(
 ) -> MessageResponse:
     campaign = await get_campaign_or_404(db, campaign_id)
     staff_ids = payload.get("staff_ids", [])
+    if not isinstance(staff_ids, list):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="staff_ids must be a list")
+    invalid_staff_ids = [sid for sid in staff_ids if not isinstance(sid, str) or not ObjectId.is_valid(sid)]
+    if invalid_staff_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid staff id in staff_ids")
     now = datetime.now(timezone.utc)
-    oids = [ObjectId(sid) for sid in staff_ids if ObjectId.is_valid(sid)]
+    oids = [ObjectId(sid) for sid in staff_ids]
     # Step 1: unbind all staff currently in this campaign
     await db.staff_users.update_many(
         {"campaign_id": campaign["_id"]},

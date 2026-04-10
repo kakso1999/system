@@ -2,10 +2,21 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
+from bson.errors import InvalidId
 from app.database import get_db
 from app.utils.security import decode_token
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def get_subject_object_id(payload: dict | None) -> ObjectId:
+    subject = (payload or {}).get("sub")
+    if not isinstance(subject, str) or not subject:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    try:
+        return ObjectId(subject)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 
 async def get_current_admin(
@@ -17,7 +28,7 @@ async def get_current_admin(
     payload = decode_token(credentials.credentials)
     if not payload or payload.get("role") != "admin":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    admin = await db.admins.find_one({"_id": ObjectId(payload["sub"])})
+    admin = await db.admins.find_one({"_id": get_subject_object_id(payload)})
     if not admin:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
     return admin
@@ -32,7 +43,7 @@ async def get_current_staff(
     payload = decode_token(credentials.credentials)
     if not payload or payload.get("role") != "staff":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    staff = await db.staff_users.find_one({"_id": ObjectId(payload["sub"])})
+    staff = await db.staff_users.find_one({"_id": get_subject_object_id(payload)})
     if not staff:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Staff not found")
     if staff.get("status") != "active":

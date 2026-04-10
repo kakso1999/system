@@ -3,6 +3,7 @@ import string
 from datetime import datetime, timezone
 
 from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
@@ -144,7 +145,14 @@ async def refresh(
     data = decode_token(payload.refresh_token)
     if not data or data.get("role") != "staff":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
-    staff = await db.staff_users.find_one({"_id": ObjectId(data["sub"])})
+    subject = data.get("sub")
+    if not isinstance(subject, str) or not subject:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    try:
+        staff_id = ObjectId(subject)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    staff = await db.staff_users.find_one({"_id": staff_id})
     if not staff or staff.get("status") != "active":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Staff not found or inactive")
     token = create_access_token({"sub": str(staff["_id"]), "role": "staff"})

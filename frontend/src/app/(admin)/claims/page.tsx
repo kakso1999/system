@@ -24,7 +24,7 @@ export default function ClaimsPage() {
       if (ipFilter) params.ip = ipFilter;
       if (deviceFilter) params.device_fingerprint = deviceFilter;
       if (prizeTypeFilter) params.prize_type = prizeTypeFilter;
-      const res = await api.get<PageResponse<Claim>>("/api/admin/claims", { params });
+      const res = await api.get<PageResponse<Claim>>("/api/admin/claims/", { params });
       setClaims(res.data.items);
       setTotal(res.data.total);
     } catch {

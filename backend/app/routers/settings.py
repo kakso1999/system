@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_db
 from app.dependencies import get_current_admin
@@ -17,5 +17,7 @@ async def get_settings(group: str | None = None, db: AsyncIOMotorDatabase = Depe
 
 @router.put("/{key}")
 async def update_setting(key: str, payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
+    if "value" not in payload:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="value is required")
     await db.system_settings.update_one({"key": key}, {"$set": {"value": payload["value"]}}, upsert=True)
     return MessageResponse(message="Setting updated")

@@ -78,30 +78,32 @@ async def calculate_commissions(db, staff_doc, claim_id, campaign_id):
     if relation1:
         rate = float(await get_setting(db, "commission_level2", 0.3))
         ancestor = await db.staff_users.find_one({"_id": relation1["ancestor_id"]}, {"vip_level": 1})
-        await create_commission_log(
-            db,
-            claim_id=claim_id,
-            source_staff_id=staff_doc["_id"],
-            beneficiary_staff_id=relation1["ancestor_id"],
-            level=2,
-            amount=rate,
-            rate=rate,
-            vip_level=int((ancestor or {}).get("vip_level", 0)),
-            campaign_id=campaign_id,
-        )
+        if ancestor:
+            await create_commission_log(
+                db,
+                claim_id=claim_id,
+                source_staff_id=staff_doc["_id"],
+                beneficiary_staff_id=relation1["ancestor_id"],
+                level=2,
+                amount=rate,
+                rate=rate,
+                vip_level=int(ancestor.get("vip_level", 0)),
+                campaign_id=campaign_id,
+            )
 
     relation2 = await db.staff_relations.find_one({"staff_id": staff_doc["_id"], "level": 2})
     if relation2:
         rate = float(await get_setting(db, "commission_level3", 0.1))
         ancestor = await db.staff_users.find_one({"_id": relation2["ancestor_id"]}, {"vip_level": 1})
-        await create_commission_log(
-            db,
-            claim_id=claim_id,
-            source_staff_id=staff_doc["_id"],
-            beneficiary_staff_id=relation2["ancestor_id"],
-            level=3,
-            amount=rate,
-            rate=rate,
-            vip_level=int((ancestor or {}).get("vip_level", 0)),
-            campaign_id=campaign_id,
-        )
+        if ancestor:
+            await create_commission_log(
+                db,
+                claim_id=claim_id,
+                source_staff_id=staff_doc["_id"],
+                beneficiary_staff_id=relation2["ancestor_id"],
+                level=3,
+                amount=rate,
+                rate=rate,
+                vip_level=int(ancestor.get("vip_level", 0)),
+                campaign_id=campaign_id,
+            )

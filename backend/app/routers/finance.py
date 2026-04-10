@@ -76,38 +76,46 @@ async def manual_settle(
         amount = float(payload["amount"])
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid amount") from exc
+    if not math.isfinite(amount) or amount <= 0:
+        raise HTTPException(status_code=400, detail="Settlement amount must be greater than 0")
     remark = payload.get("remark", "")
     staff = await db.staff_users.find_one({"_id": staff_id})
     if not staff:
         raise HTTPException(status_code=404, detail="Staff not found")
 
-    # Validate: check total approved amount
-    total_approved_pipeline = [
-        {"$match": {"beneficiary_staff_id": staff_id, "status": "approved"}},
-        {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
-    ]
-    agg = await db.commission_logs.aggregate(total_approved_pipeline).to_list(length=1)
-    total_approved = agg[0]["total"] if agg else 0
+    approved_logs = await db.commission_logs.find(
+        {"beneficiary_staff_id": staff_id, "status": "approved"}
+    ).sort("created_at", 1).to_list(length=100000)
+    total_approved = sum(float(log.get("amount", 0)) for log in approved_logs)
     if amount > total_approved:
         raise HTTPException(status_code=400, detail=f"Settlement amount {amount} exceeds approved balance {total_approved}")
 
     remaining = amount
-    cursor = db.commission_logs.find(
-        {"beneficiary_staff_id": staff_id, "status": "approved"}
-    ).sort("created_at", 1)
-    now = datetime.now(timezone.utc)
-    settled_count = 0
-    async for log in cursor:
+    settle_ids: list[ObjectId] = []
+    settled_amount = 0.0
+    for log in approved_logs:
         if remaining <= 0:
             break
-        if log["amount"] > remaining:
-            break  # Don't partially settle a single record
-        await db.commission_logs.update_one(
-            {"_id": log["_id"]},
-            {"$set": {"status": "paid", "paid_at": now, "settled_by": admin.get("username", "admin")}},
-        )
-        remaining -= log["amount"]
-        settled_count += 1
+        log_amount = float(log.get("amount", 0))
+        if log_amount <= 0:
+            continue
+        if log_amount > remaining:
+            break
+        settle_ids.append(log["_id"])
+        settled_amount += log_amount
+        remaining -= log_amount
+    if remaining > 1e-9:
+        raise HTTPException(status_code=400, detail="Settlement amount must match full approved commission records")
+    if not settle_ids:
+        raise HTTPException(status_code=400, detail="No approved commission records to settle")
+
+    now = datetime.now(timezone.utc)
+    update_result = await db.commission_logs.update_many(
+        {"_id": {"$in": settle_ids}, "status": "approved"},
+        {"$set": {"status": "paid", "paid_at": now, "settled_by": admin.get("username", "admin")}},
+    )
+    if update_result.modified_count != len(settle_ids):
+        raise HTTPException(status_code=409, detail="Settlement conflict, please retry")
 
     await db.finance_action_logs.insert_one({
         "operator": admin.get("username", "admin"),
@@ -116,11 +124,11 @@ async def manual_settle(
         "target_id": staff_id,
         "old_status": "approved",
         "new_status": "paid",
-        "amount_change": amount,
+        "amount_change": round(settled_amount, 2),
         "remark": remark,
         "created_at": now,
     })
-    return MessageResponse(message=f"Settled {settled_count} commission records")
+    return MessageResponse(message=f"Settled {len(settle_ids)} commission records")
 
 
 @router.get("/settlement-records", response_model=PageResponse)
@@ -163,7 +171,12 @@ async def approve_commission(
         raise HTTPException(status_code=404, detail="Commission not found")
     if commission.get("status") != "pending":
         raise HTTPException(status_code=400, detail="Only pending commissions can be approved")
-    await db.commission_logs.update_one({"_id": oid}, {"$set": {"status": "approved", "approved_at": datetime.now(timezone.utc)}})
+    update_result = await db.commission_logs.update_one(
+        {"_id": oid, "status": "pending"},
+        {"$set": {"status": "approved", "approved_at": datetime.now(timezone.utc)}},
+    )
+    if not update_result.modified_count:
+        raise HTTPException(status_code=409, detail="Commission status changed, please retry")
     await log_finance_action(
         db,
         admin=admin,
@@ -192,10 +205,12 @@ async def reject_commission(
     if commission.get("status") != "pending":
         raise HTTPException(status_code=400, detail="Only pending commissions can be rejected")
     reason = payload.get("reason", "").strip()
-    await db.commission_logs.update_one(
-        {"_id": oid},
+    update_result = await db.commission_logs.update_one(
+        {"_id": oid, "status": "pending"},
         {"$set": {"status": "rejected", "rejected_at": datetime.now(timezone.utc), "reject_reason": reason}},
     )
+    if not update_result.modified_count:
+        raise HTTPException(status_code=409, detail="Commission status changed, please retry")
     await log_finance_action(
         db,
         admin=admin,
@@ -262,10 +277,12 @@ async def approve_withdrawal(
     withdrawal = await get_withdrawal_or_404(db, oid)
     if withdrawal.get("status") != "pending":
         raise HTTPException(status_code=400, detail="Only pending withdrawal requests can be approved")
-    await db.withdrawal_requests.update_one(
-        {"_id": oid},
+    update_result = await db.withdrawal_requests.update_one(
+        {"_id": oid, "status": "pending"},
         {"$set": {"status": "approved", "reviewed_at": datetime.now(timezone.utc), "reviewed_by": admin.get("username", "admin")}},
     )
+    if not update_result.modified_count:
+        raise HTTPException(status_code=409, detail="Withdrawal status changed, please retry")
     await log_finance_action(
         db, admin=admin, action="approve", target_type="withdrawal", target_id=oid,
         old_status="pending", new_status="approved", amount=float(withdrawal.get("amount", 0)), remark=""
@@ -287,10 +304,12 @@ async def reject_withdrawal(
     reason = str(payload.get("reason", "")).strip()
     if not reason:
         raise HTTPException(status_code=400, detail="Reject reason is required")
-    await db.withdrawal_requests.update_one(
-        {"_id": oid},
+    update_result = await db.withdrawal_requests.update_one(
+        {"_id": oid, "status": "pending"},
         {"$set": {"status": "rejected", "reject_reason": reason, "reviewed_at": datetime.now(timezone.utc), "reviewed_by": admin.get("username", "admin")}},
     )
+    if not update_result.modified_count:
+        raise HTTPException(status_code=409, detail="Withdrawal status changed, please retry")
     await log_finance_action(
         db, admin=admin, action="reject", target_type="withdrawal", target_id=oid,
         old_status="pending", new_status="rejected", amount=float(withdrawal.get("amount", 0)), remark=reason
@@ -313,10 +332,12 @@ async def complete_withdrawal(
     if not transaction_no:
         raise HTTPException(status_code=400, detail="Transaction number is required")
     remark = str(payload.get("remark", "")).strip()
-    await db.withdrawal_requests.update_one(
-        {"_id": oid},
+    update_result = await db.withdrawal_requests.update_one(
+        {"_id": oid, "status": "approved"},
         {"$set": {"status": "paid", "transaction_no": transaction_no, "remark": remark or None, "paid_at": datetime.now(timezone.utc), "paid_by": admin.get("username", "admin")}},
     )
+    if not update_result.modified_count:
+        raise HTTPException(status_code=409, detail="Withdrawal status changed, please retry")
     await log_finance_action(
         db, admin=admin, action="complete", target_type="withdrawal", target_id=oid,
         old_status="approved", new_status="paid", amount=float(withdrawal.get("amount", 0)), remark=remark or transaction_no

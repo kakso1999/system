@@ -33,6 +33,13 @@ async def process_post_claim(db, staff_doc, claim_id, campaign_id):
     await check_team_rewards(db, latest_staff)
 
 
+async def get_active_campaign_or_404(db, campaign_id: ObjectId) -> dict:
+    campaign = await db.campaigns.find_one({"_id": campaign_id, "status": "active"})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found or inactive")
+    return campaign
+
+
 def safe_object_id(value):
     """Convert to ObjectId safely, return None on failure."""
     if not value:
@@ -190,19 +197,18 @@ async def welcome(staff_code: str, request: Request, db: AsyncIOMotorDatabase = 
 
 @router.post("/spin")
 async def spin(payload: dict, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
-    staff_code = payload.get("staff_code", "")
+    staff_code = str(payload.get("staff_code", "")).strip().upper()
     cid_str = payload.get("campaign_id", "")
-
-    # Validate staff_code matches campaign
-    staff = None
-    if staff_code:
-        staff = await db.staff_users.find_one({"invite_code": staff_code.upper()})
-        if staff and staff.get("campaign_id"):
-            expected_cid = str(staff["campaign_id"])
-            if cid_str != expected_cid:
-                raise HTTPException(status_code=400, detail="Campaign does not match promoter")
+    if not staff_code:
+        raise HTTPException(status_code=422, detail="staff_code is required")
 
     cid = parse_object_id(cid_str, "campaign_id")
+    campaign = await get_active_campaign_or_404(db, cid)
+    staff = await db.staff_users.find_one({"invite_code": staff_code})
+    if not staff:
+        raise HTTPException(status_code=404, detail="Promoter not found")
+    if staff.get("campaign_id") != campaign["_id"]:
+        raise HTTPException(status_code=400, detail="Campaign does not match promoter")
     items = await db.wheel_items.find(
         {"campaign_id": cid, "enabled": True}
     ).sort("sort_order", 1).to_list(length=50)
@@ -258,8 +264,9 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
 
     sms_on = await get_setting(db, "sms_verification")
     if not sms_on:
-        # Still validate phone format even when SMS is off
-        if phone and not PHONE_RE.match(phone):
+        try:
+            validate_phone(phone)
+        except HTTPException:
             return {"verified": False, "message": "Invalid phone number format"}
         return {"verified": True, "message": "Phone recorded"}
 
@@ -317,6 +324,10 @@ async def verify_otp(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
     otp_code = payload.get("code", "").strip()
     if not phone or not otp_code:
         return {"verified": False, "message": "Phone and OTP code are required"}
+    try:
+        phone = validate_phone(phone)
+    except HTTPException:
+        return {"verified": False, "message": "Invalid phone number format"}
 
     now = datetime.now(timezone.utc)
 
@@ -364,6 +375,7 @@ async def complete(
 ):
     cid = parse_object_id(payload.get("campaign_id", ""), "campaign_id")
     wid = parse_object_id(payload.get("wheel_item_id", ""), "wheel_item_id")
+    campaign = await get_active_campaign_or_404(db, cid)
     phone = validate_phone(payload.get("phone", ""))
     ip = request.client.host if request.client else ""
     device_fp = payload.get("device_fingerprint", "")
@@ -373,6 +385,8 @@ async def complete(
     staff = await db.staff_users.find_one({"invite_code": staff_code})
     if not staff:
         raise HTTPException(status_code=404, detail="Promoter not found")
+    if staff.get("campaign_id") != cid:
+        raise HTTPException(status_code=400, detail="Campaign does not match promoter")
 
     # SMS verification check (CRIT-2 fix: bind to campaign_id)
     sms_on = await get_setting(db, "sms_verification")
@@ -385,15 +399,15 @@ async def complete(
             "verified_at": {"$gte": five_min_ago},
         })
         if not verified_otp:
-            await log_risk(db, payload["campaign_id"], phone, ip, device_fp,
+            await log_risk(db, str(cid), phone, ip, device_fp,
                            "sms_not_verified", "Attempted claim without SMS verification")
             return {"success": False, "message": "Phone number not verified. Please complete SMS verification first."}
 
     # Risk control checks
-    hits = await check_risk(db, phone, ip, device_fp, payload["campaign_id"])
+    hits = await check_risk(db, phone, ip, device_fp, str(cid))
     if hits:
         for h in hits:
-            await log_risk(db, payload["campaign_id"], phone, ip, device_fp, h["rule"], h["reason"])
+            await log_risk(db, str(cid), phone, ip, device_fp, h["rule"], h["reason"])
         rule_messages = {
             "phone_duplicate": "This phone number has already claimed a prize.",
             "ip_duplicate": "A prize has already been claimed from this network.",
@@ -403,9 +417,19 @@ async def complete(
         msg = rule_messages.get(hits[0]["rule"], "Already claimed. Each person can only claim once.")
         return {"success": False, "message": msg}
 
-    item = await db.wheel_items.find_one({"_id": wid})
+    item = await db.wheel_items.find_one({"_id": wid, "campaign_id": cid, "enabled": True})
     if not item:
         raise HTTPException(status_code=404, detail="Wheel item not found")
+    max_per_staff = int(item.get("max_per_staff", 0) or 0)
+    if max_per_staff > 0:
+        claimed_count = await db.claims.count_documents({
+            "staff_id": staff["_id"],
+            "wheel_item_id": wid,
+            "campaign_id": cid,
+            "status": "success",
+        })
+        if claimed_count >= max_per_staff:
+            return {"success": False, "message": "Prize quota reached for this promoter."}
 
     reward_code = None
     reward_code_id = None
@@ -418,7 +442,6 @@ async def complete(
             phone=phone,
         )
 
-    campaign = await db.campaigns.find_one({"_id": cid})
     redirect_url = item.get("redirect_url") or (campaign.get("prize_url", "") if campaign else "")
 
     claim = {

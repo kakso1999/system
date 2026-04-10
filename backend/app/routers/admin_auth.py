@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from bson import ObjectId
+from bson.errors import InvalidId
 
 from app.database import get_db
 from app.dependencies import get_current_admin
@@ -34,8 +36,14 @@ async def refresh(
     data = decode_token(payload.refresh_token)
     if not data or data.get("role") != "admin":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
-    from bson import ObjectId
-    admin = await db.admins.find_one({"_id": ObjectId(data["sub"])})
+    subject = data.get("sub")
+    if not isinstance(subject, str) or not subject:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    try:
+        admin_id = ObjectId(subject)
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    admin = await db.admins.find_one({"_id": admin_id})
     if not admin:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
     token = create_access_token({"sub": str(admin["_id"]), "role": "admin"})

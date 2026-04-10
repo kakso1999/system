@@ -1,5 +1,5 @@
 import math
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_db
 from app.dependencies import get_current_admin
@@ -23,9 +23,10 @@ ALLOWED_RISK_KEYS = {
 
 @router.put("/")
 async def update_risk_setting(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
+    if "key" not in payload or "value" not in payload:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="key and value are required")
     if payload.get("key") not in ALLOWED_RISK_KEYS:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=422, detail="Unknown risk control setting")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unknown risk control setting")
     await db.system_settings.update_one(
         {"key": payload["key"]},
         {"$set": {"value": payload["value"]}},
