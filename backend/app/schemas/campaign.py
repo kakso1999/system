@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 CampaignStatus = Literal["draft", "active", "paused", "ended"]
 CampaignPublishStatus = Literal["active", "paused", "ended"]
 WheelItemType = Literal["onsite", "website"]
-RewardCodeStatus = Literal["unused", "used", "blocked"]
+RewardCodeStatus = Literal["unused", "used", "blocked", "assigned", "redeemed"]
 
 
 class CampaignCreateRequest(BaseModel):
@@ -63,6 +63,7 @@ class WheelItemCreateRequest(BaseModel):
     type: WheelItemType
     weight: int = 10
     sort_order: int = 0
+    max_per_staff: int = Field(0, ge=0)
     enabled: bool = True
     needs_reward_code: bool = False
     reward_code_pool: str = ""
@@ -80,6 +81,7 @@ class WheelItemUpdateRequest(BaseModel):
     type: WheelItemType | None = None
     weight: int | None = None
     sort_order: int | None = None
+    max_per_staff: int | None = Field(None, ge=0)
     enabled: bool | None = None
     needs_reward_code: bool | None = None
     reward_code_pool: str | None = None
@@ -96,6 +98,7 @@ class WheelItemDetail(BaseModel):
     type: WheelItemType
     weight: int
     sort_order: int
+    max_per_staff: int = 0
     enabled: bool
     needs_reward_code: bool
     reward_code_pool: str = ""

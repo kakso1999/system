@@ -1,12 +1,20 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Plus, Pencil, Trash2, Play, Pause, Eye, Users, Settings2, ExternalLink, Upload, Gift } from "lucide-react";
+import { Plus, Pencil, Trash2, Play, Pause, Eye, Users, Settings2, ExternalLink, Upload, Gift, ChevronDown, ChevronRight } from "lucide-react";
 import api from "@/lib/api";
 import type { Campaign, PageResponse, WheelItem, Staff } from "@/types";
 
 type ModalMode = "create" | "edit" | "wheel" | "staff" | null;
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+interface StaffPrizeStat {
+  wheel_item_id: string;
+  display_name: string;
+  type: "onsite" | "website";
+  max_per_staff: number;
+  claimed_count: number;
+}
 
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -19,11 +27,24 @@ export default function CampaignsPage() {
   const [form, setForm] = useState({ name: "", description: "", start_time: "", end_time: "", rules_text: "", max_claims_per_user: 1 });
 
   const [wheelItems, setWheelItems] = useState<WheelItem[]>([]);
-  const [wheelForm, setWheelForm] = useState({ name: "", display_name: "", type: "onsite" as "onsite" | "website", weight: 10, sort_order: 0, redirect_url: "", display_text: "", enabled: true });
+  const [wheelForm, setWheelForm] = useState({
+    name: "",
+    display_name: "",
+    type: "onsite" as "onsite" | "website",
+    weight: 10,
+    sort_order: 0,
+    max_per_staff: 0,
+    redirect_url: "",
+    display_text: "",
+    enabled: true,
+  });
   const [editingWheel, setEditingWheel] = useState<WheelItem | null>(null);
 
   const [allStaff, setAllStaff] = useState<Staff[]>([]);
   const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
+  const [expandedStaffIds, setExpandedStaffIds] = useState<Record<string, boolean>>({});
+  const [staffPrizeStats, setStaffPrizeStats] = useState<Record<string, StaffPrizeStat[]>>({});
+  const [loadingStaffStats, setLoadingStaffStats] = useState<Record<string, boolean>>({});
 
   const loadCampaigns = useCallback(async () => {
     setLoading(true);
@@ -68,6 +89,9 @@ export default function CampaignsPage() {
   const openStaff = async (c: Campaign) => {
     setSelected(c);
     setModal("staff");
+    setExpandedStaffIds({});
+    setStaffPrizeStats({});
+    setLoadingStaffStats({});
     try {
       const staffRes = await api.get<PageResponse<Staff>>("/api/admin/staff/", { params: { page: 1, page_size: 100 } });
       setAllStaff(staffRes.data.items);
@@ -117,7 +141,17 @@ export default function CampaignsPage() {
   };
 
   const resetWheelForm = () => {
-    setWheelForm({ name: "", display_name: "", type: "onsite", weight: 10, sort_order: 0, redirect_url: "", display_text: "", enabled: true });
+    setWheelForm({
+      name: "",
+      display_name: "",
+      type: "onsite",
+      weight: 10,
+      sort_order: 0,
+      max_per_staff: 0,
+      redirect_url: "",
+      display_text: "",
+      enabled: true,
+    });
   };
 
   const handleSaveWheel = async (e: React.FormEvent) => {
@@ -141,7 +175,17 @@ export default function CampaignsPage() {
 
   const editWheel = (w: WheelItem) => {
     setEditingWheel(w);
-    setWheelForm({ name: w.name, display_name: w.display_name, type: w.type, weight: w.weight, sort_order: w.sort_order, redirect_url: w.redirect_url || "", display_text: w.display_text || "", enabled: w.enabled });
+    setWheelForm({
+      name: w.name,
+      display_name: w.display_name,
+      type: w.type,
+      weight: w.weight,
+      sort_order: w.sort_order,
+      max_per_staff: w.max_per_staff || 0,
+      redirect_url: w.redirect_url || "",
+      display_text: w.display_text || "",
+      enabled: w.enabled,
+    });
   };
 
   const deleteWheel = async (w: WheelItem) => {
@@ -188,6 +232,25 @@ export default function CampaignsPage() {
 
   const toggleStaffSelect = (id: string) => {
     setSelectedStaffIds(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
+  };
+
+  const toggleStaffStats = async (staffId: string) => {
+    const isExpanded = !!expandedStaffIds[staffId];
+    setExpandedStaffIds(prev => ({ ...prev, [staffId]: !prev[staffId] }));
+
+    if (isExpanded || !selected || staffPrizeStats[staffId]) {
+      return;
+    }
+
+    setLoadingStaffStats(prev => ({ ...prev, [staffId]: true }));
+    try {
+      const res = await api.get<StaffPrizeStat[]>(`/api/admin/campaigns/${selected.id}/staff/${staffId}/prize-stats`);
+      setStaffPrizeStats(prev => ({ ...prev, [staffId]: res.data }));
+    } catch {
+      setStaffPrizeStats(prev => ({ ...prev, [staffId]: [] }));
+    } finally {
+      setLoadingStaffStats(prev => ({ ...prev, [staffId]: false }));
+    }
   };
 
   const saveStaffBinding = async () => {
@@ -389,6 +452,9 @@ export default function CampaignsPage() {
                         </span>
                         <span className="font-semibold text-sm">{w.display_name}</span>
                         <span className="text-xs text-outline font-bold">{w.weight}%</span>
+                        <span className={`text-xs font-bold ${w.max_per_staff > 0 ? "text-secondary" : "text-outline"}`}>
+                          每员工上限: {w.max_per_staff > 0 ? w.max_per_staff : "不限"}
+                        </span>
                         {w.type === "website" && w.redirect_url && (
                           <span className="text-xs text-primary flex items-center gap-1"><ExternalLink className="w-3 h-3" />{w.redirect_url.slice(0, 30)}{w.redirect_url.length > 30 ? "..." : ""}</span>
                         )}
@@ -431,7 +497,7 @@ export default function CampaignsPage() {
                       placeholder="如: iPhone 15" className="w-full bg-surface-container-low border-none rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-primary/40" required />
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div>
                     <label className="text-xs font-bold text-outline block mb-1">类型</label>
                     <select value={wheelForm.type} onChange={e => setWheelForm({...wheelForm, type: e.target.value as "onsite" | "website"})}
@@ -449,6 +515,16 @@ export default function CampaignsPage() {
                     <label className="text-xs font-bold text-outline block mb-1">排序</label>
                     <input type="number" value={wheelForm.sort_order} onChange={e => setWheelForm({...wheelForm, sort_order: parseInt(e.target.value) || 0})}
                       className="w-full bg-surface-container-low border-none rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-primary/40" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-outline block mb-1">最大数量/员工</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={wheelForm.max_per_staff}
+                      onChange={e => setWheelForm({ ...wheelForm, max_per_staff: Math.max(0, parseInt(e.target.value) || 0) })}
+                      className="w-full bg-surface-container-low border-none rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-primary/40"
+                    />
                   </div>
                 </div>
                 {wheelForm.type === "website" && (
@@ -496,15 +572,64 @@ export default function CampaignsPage() {
                 <h3 className="text-sm font-bold text-on-surface-variant uppercase tracking-wider mb-2">已绑定 ({selectedStaffIds.length}人)</h3>
                 <div className="space-y-2">
                   {allStaff.filter(s => selectedStaffIds.includes(s.id)).map(s => (
-                    <div key={s.id} className="flex items-center justify-between p-3 rounded-xl bg-primary/10">
-                      <div>
-                        <p className="font-semibold text-sm">{s.name} <span className="text-xs text-outline ml-1">{s.staff_no}</span></p>
-                        <p className="text-xs text-on-surface-variant">{s.phone}</p>
+                    <div key={s.id} className="rounded-xl bg-primary/10 p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleStaffStats(s.id)}
+                            className="p-1 rounded-md text-outline hover:bg-surface-container-low transition-colors"
+                            title={expandedStaffIds[s.id] ? "收起奖项统计" : "展开奖项统计"}
+                          >
+                            {expandedStaffIds[s.id] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                          </button>
+                          <div>
+                            <p className="font-semibold text-sm">{s.name} <span className="text-xs text-outline ml-1">{s.staff_no}</span></p>
+                            <p className="text-xs text-on-surface-variant">{s.phone}</p>
+                          </div>
+                        </div>
+                        <button onClick={() => toggleStaffSelect(s.id)}
+                          className="p-1.5 rounded-lg text-error hover:bg-error/10 transition-colors" title="移除">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-                      <button onClick={() => toggleStaffSelect(s.id)}
-                        className="p-1.5 rounded-lg text-error hover:bg-error/10 transition-colors" title="移除">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+
+                      {expandedStaffIds[s.id] && (
+                        <div className="mt-3 rounded-lg border border-outline-variant/30 bg-surface-container-low p-3">
+                          <div className="grid grid-cols-4 text-[11px] font-bold text-outline uppercase tracking-wider">
+                            <span>奖项</span>
+                            <span className="text-center">最大</span>
+                            <span className="text-center">已领</span>
+                            <span className="text-right">剩余</span>
+                          </div>
+                          <div className="mt-2 space-y-1.5">
+                            {loadingStaffStats[s.id] && (
+                              <p className="text-xs text-on-surface-variant py-2">加载中...</p>
+                            )}
+                            {!loadingStaffStats[s.id] && (staffPrizeStats[s.id] || []).map(stat => {
+                              const limited = stat.max_per_staff > 0;
+                              const remaining = limited ? Math.max(0, stat.max_per_staff - stat.claimed_count) : null;
+                              const exhausted = limited && stat.claimed_count >= stat.max_per_staff;
+                              return (
+                                <div key={stat.wheel_item_id} className="grid grid-cols-4 items-center text-xs">
+                                  <div className="truncate pr-2">
+                                    {stat.display_name}
+                                    <span className="ml-1 text-outline">({stat.type === "website" ? "跳转" : "现场"})</span>
+                                  </div>
+                                  <span className="text-center font-semibold">{limited ? stat.max_per_staff : "∞"}</span>
+                                  <span className="text-center">{stat.claimed_count}</span>
+                                  <span className={`text-right font-bold ${exhausted ? "text-error" : "text-green-700"}`}>
+                                    {limited ? remaining : "不限"}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                            {!loadingStaffStats[s.id] && (staffPrizeStats[s.id] || []).length === 0 && (
+                              <p className="text-xs text-on-surface-variant py-2">暂无奖项统计</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

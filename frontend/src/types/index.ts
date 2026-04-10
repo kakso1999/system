@@ -43,6 +43,7 @@ export interface WheelItem {
   type: "onsite" | "website";
   weight: number;
   sort_order: number;
+  max_per_staff: number;
   enabled: boolean;
   needs_reward_code: boolean;
   redirect_url: string;

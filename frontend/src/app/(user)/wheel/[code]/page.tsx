@@ -72,6 +72,7 @@ export default function WheelPage() {
     success: boolean; claim_id?: string; prize_type?: string;
     reward_code?: string; redirect_url?: string; message: string;
   } | null>(null);
+  const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
 
   useEffect(() => {
     setDeviceFp(generateDeviceFingerprint());
@@ -87,6 +88,16 @@ export default function WheelPage() {
     const timer = setInterval(() => setOtpCooldown(c => c - 1), 1000);
     return () => clearInterval(timer);
   }, [otpCooldown]);
+
+  useEffect(() => {
+    if (!claimResult?.success || !claimResult.claim_id || redirectCountdown === null) return;
+    if (redirectCountdown <= 0) {
+      router.push(`/result/${claimResult.claim_id}`);
+      return;
+    }
+    const timer = setTimeout(() => setRedirectCountdown(prev => (prev === null ? null : prev - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [claimResult, redirectCountdown, router]);
 
   const loadWheel = async () => {
     try {
@@ -177,6 +188,8 @@ export default function WheelPage() {
     if (spinning || items.length === 0) return;
     setSpinning(true);
     setShowResult(false);
+    setClaimResult(null);
+    setRedirectCountdown(null);
 
     try {
       const res = await api.post<SpinResult>("/api/claim/spin", {
@@ -279,11 +292,12 @@ export default function WheelPage() {
       });
       setClaimResult(res.data);
       if (res.data.success && res.data.claim_id) {
-        setTimeout(() => router.push(`/result/${res.data.claim_id}`), 2000);
+        setRedirectCountdown(res.data.reward_code ? 5 : 2);
       }
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: string } } };
       setClaimResult({ success: false, message: axiosErr.response?.data?.detail || "Claim failed" });
+      setRedirectCountdown(null);
     } finally {
       setClaiming(false);
     }
@@ -469,10 +483,21 @@ export default function WheelPage() {
                 </h3>
                 <p className="text-sm text-on-surface-variant">{claimResult.message}</p>
                 {claimResult.reward_code && (
-                  <div className="mt-4 p-3 bg-white rounded-lg">
+                  <div className="mt-4 rounded-xl border-2 border-primary bg-white p-4">
                     <p className="text-xs font-bold text-outline uppercase tracking-wider mb-1">Your Reward Code</p>
-                    <p className="font-mono text-lg font-bold text-primary">{claimResult.reward_code}</p>
+                    <p className="font-mono text-2xl font-extrabold text-primary tracking-wider">{claimResult.reward_code}</p>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(claimResult.reward_code!)}
+                      className="mt-2 text-xs text-primary font-bold hover:underline"
+                    >
+                      Copy Code
+                    </button>
                   </div>
+                )}
+                {claimResult.success && redirectCountdown !== null && (
+                  <p className="mt-3 text-xs font-semibold text-on-surface-variant">
+                    Redirecting to result page in {redirectCountdown}s...
+                  </p>
                 )}
                 {claimResult.redirect_url && (
                   <a href={claimResult.redirect_url} target="_blank" rel="noopener noreferrer"

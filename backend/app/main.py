@@ -76,7 +76,7 @@ app.add_middleware(
 # Import and register routers
 from app.routers import admin_auth, staff_auth, campaigns, wheel, reward_codes
 from app.routers import staff, claims, user_flow, risk_control, settings as settings_router
-from app.routers import promoter, finance, dashboard
+from app.routers import promoter, finance, dashboard, external
 
 app.include_router(admin_auth.router, prefix="/api/auth/admin", tags=["Admin Auth"])
 app.include_router(staff_auth.router, prefix="/api/auth/staff", tags=["Staff Auth"])
@@ -91,6 +91,7 @@ app.include_router(finance.router, prefix="/api/admin/finance", tags=["Finance"]
 app.include_router(dashboard.router, prefix="/api/admin/dashboard", tags=["Dashboard"])
 app.include_router(user_flow.router, prefix="/api/claim", tags=["User Claim Flow"])
 app.include_router(promoter.router, prefix="/api/promoter", tags=["Promoter"])
+app.include_router(external.router, prefix="/api/external", tags=["External"])
 
 # Static files for uploaded images
 upload_dir = Path(__file__).parent.parent / "uploads"

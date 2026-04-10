@@ -1,5 +1,6 @@
 import re
 import secrets
+import string
 from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
@@ -105,6 +106,46 @@ def validate_phone(phone: str) -> str:
     return phone
 
 
+def no_prize_result() -> dict:
+    return {
+        "result_index": -1,
+        "wheel_item": {
+            "id": "",
+            "display_name": "No Prize",
+            "type": "none",
+            "display_text": "Sorry, better luck next time!",
+        },
+    }
+
+
+def generate_reward_code() -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    return "RC" + "".join(secrets.choice(alphabet) for _ in range(8))
+
+
+async def create_generated_reward_code(db, *, campaign_id, wheel_item_id, staff_id, phone):
+    now = datetime.now(timezone.utc)
+    for _ in range(5):
+        code = generate_reward_code()
+        rc_doc = {
+            "code": code,
+            "campaign_id": campaign_id,
+            "wheel_item_id": wheel_item_id,
+            "pool_type": "auto_generated",
+            "staff_id": staff_id,
+            "phone": phone,
+            "status": "assigned",
+            "created_at": now,
+            "updated_at": now,
+        }
+        try:
+            result = await db.reward_codes.insert_one(rc_doc)
+            return code, result.inserted_id
+        except DuplicateKeyError:
+            continue
+    raise HTTPException(status_code=500, detail="Failed to generate reward code, please retry")
+
+
 @router.get("/welcome/{staff_code}")
 async def welcome(staff_code: str, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
     staff = await db.staff_users.find_one({"invite_code": staff_code.upper()})
@@ -153,6 +194,7 @@ async def spin(payload: dict, request: Request, db: AsyncIOMotorDatabase = Depen
     cid_str = payload.get("campaign_id", "")
 
     # Validate staff_code matches campaign
+    staff = None
     if staff_code:
         staff = await db.staff_users.find_one({"invite_code": staff_code.upper()})
         if staff and staff.get("campaign_id"):
@@ -185,14 +227,20 @@ async def spin(payload: dict, request: Request, db: AsyncIOMotorDatabase = Depen
             break
 
     if chosen >= len(items):
-        return {
-            "result_index": -1,
-            "wheel_item": {
-                "id": "", "display_name": "No Prize",
-                "type": "none", "display_text": "Sorry, better luck next time!",
-            },
-        }
+        return no_prize_result()
+
     item = items[chosen]
+    max_per_staff = int(item.get("max_per_staff", 0) or 0)
+    if max_per_staff > 0 and staff:
+        claimed_count = await db.claims.count_documents({
+            "staff_id": staff["_id"],
+            "wheel_item_id": item["_id"],
+            "campaign_id": cid,
+            "status": "success",
+        })
+        if claimed_count >= max_per_staff:
+            return no_prize_result()
+
     return {
         "result_index": chosen,
         "wheel_item": {
@@ -361,17 +409,14 @@ async def complete(
 
     reward_code = None
     reward_code_id = None
-    if item.get("type") == "website" and item.get("needs_reward_code"):
-        rc = await db.reward_codes.find_one_and_update(
-            {"wheel_item_id": wid, "status": "unused"},
-            {"$set": {"status": "assigned", "assigned_to_phone": phone,
-                      "source_staff_id": staff["_id"],
-                      "assigned_at": datetime.now(timezone.utc)}},
+    if item.get("type") == "website":
+        reward_code, reward_code_id = await create_generated_reward_code(
+            db,
+            campaign_id=cid,
+            wheel_item_id=wid,
+            staff_id=staff["_id"],
+            phone=phone,
         )
-        if not rc:
-            return {"success": False, "message": "Reward codes exhausted"}
-        reward_code = rc["code"]
-        reward_code_id = rc["_id"]
 
     campaign = await db.campaigns.find_one({"_id": cid})
     redirect_url = item.get("redirect_url") or (campaign.get("prize_url", "") if campaign else "")

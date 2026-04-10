@@ -50,7 +50,7 @@ async def award_team_reward(db, staff_doc, *, milestone: str, threshold: int, am
         "vip_level_at_time": int(staff_doc.get("vip_level", 0)),
         "currency": "PHP",
         "campaign_id": staff_doc.get("campaign_id"),
-        "status": "pending",
+        "status": "approved",
         "created_at": now,
     })
     await db.staff_users.update_one(

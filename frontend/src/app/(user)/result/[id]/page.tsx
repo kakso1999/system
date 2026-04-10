@@ -78,6 +78,19 @@ export default function ResultPage() {
 
         {isSuccess && (
           <div className="space-y-4">
+            {data.reward_code && (
+              <div className="rounded-2xl border-2 border-primary bg-primary/10 p-5 text-center">
+                <p className="text-xs font-extrabold text-primary uppercase tracking-[0.2em] mb-2">Your Reward Code</p>
+                <p className="font-mono text-3xl font-extrabold text-primary tracking-wider">{data.reward_code}</p>
+                <button
+                  onClick={() => navigator.clipboard.writeText(data.reward_code!)}
+                  className="mt-3 text-sm text-primary font-bold hover:underline"
+                >
+                  Copy Code
+                </button>
+              </div>
+            )}
+
             {data.prize_type === "onsite" && (
               <div className="bg-surface-container-lowest rounded-xl p-6 shadow-sm text-center">
                 <Gift className="w-10 h-10 text-secondary mb-3 mx-auto block" />
@@ -94,19 +107,6 @@ export default function ResultPage() {
                 <Star className="w-10 h-10 text-primary mb-3 mx-auto block" />
                 <h3 className="font-bold text-lg mb-2">Grand Prize</h3>
                 <p className="text-on-surface-variant text-sm mb-4">Complete your claim at the partner website.</p>
-
-                {data.reward_code && (
-                  <div className="bg-primary/5 p-4 rounded-xl mb-4">
-                    <p className="text-xs font-bold text-outline uppercase tracking-wider mb-1">Reward Code</p>
-                    <p className="font-mono text-xl font-bold text-primary">{data.reward_code}</p>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(data.reward_code!)}
-                      className="mt-2 text-xs text-primary font-bold hover:underline"
-                    >
-                      Copy Code
-                    </button>
-                  </div>
-                )}
 
                 {data.redirect_url && (
                   <a href={data.redirect_url} target="_blank" rel="noopener noreferrer"

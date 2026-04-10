@@ -39,7 +39,7 @@ async def create_commission_log(
         "vip_level_at_time": vip_level,
         "currency": "PHP",
         "campaign_id": campaign_id,
-        "status": "pending",
+        "status": "approved",
         "created_at": now,
     }
     try:

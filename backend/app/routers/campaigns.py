@@ -153,6 +153,38 @@ async def list_campaign_staff(
     return result
 
 
+@router.get("/{campaign_id}/staff/{staff_id}/prize-stats")
+async def staff_prize_stats(
+    campaign_id: str,
+    staff_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    """Return per-wheel-item claimed counts for a specific staff in a campaign."""
+    cid = parse_object_id(campaign_id, "campaign_id")
+    sid = parse_object_id(staff_id, "staff_id")
+
+    wheel_items = await db.wheel_items.find(
+        {"campaign_id": cid, "enabled": True}
+    ).sort("sort_order", 1).to_list(length=50)
+
+    result = []
+    for item in wheel_items:
+        claimed = await db.claims.count_documents({
+            "staff_id": sid,
+            "wheel_item_id": item["_id"],
+            "campaign_id": cid,
+            "status": "success",
+        })
+        result.append({
+            "wheel_item_id": str(item["_id"]),
+            "display_name": item["display_name"],
+            "type": item["type"],
+            "max_per_staff": int(item.get("max_per_staff", 0) or 0),
+            "claimed_count": claimed,
+        })
+    return result
+
+
 @router.delete("/{campaign_id}", response_model=MessageResponse)
 async def delete_campaign(
     campaign_id: str,
