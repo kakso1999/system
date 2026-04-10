@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { BadgeCheck, User, Lock, LogIn } from "lucide-react";
 import api from "@/lib/api";
 import { setAuth } from "@/lib/auth";
 
 export default function StaffLoginPage() {
+  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -18,7 +20,7 @@ export default function StaffLoginPage() {
     try {
       const res = await api.post("/api/auth/staff/login", { username, password });
       setAuth(res.data.access_token, "staff", res.data.refresh_token);
-      window.location.href = "/home";
+      router.replace("/home");
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: string } } };
       setError(axiosErr.response?.data?.detail || "Login failed");

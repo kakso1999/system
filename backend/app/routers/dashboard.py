@@ -1,15 +1,15 @@
-from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_db
 from app.dependencies import get_current_admin
+from app.utils.datetime import get_day_start_utc
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
 
 
 @router.get("/")
 async def get_dashboard(db: AsyncIOMotorDatabase = Depends(get_db)):
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = get_day_start_utc()
 
     today_scans = await db.scan_logs.count_documents({"created_at": {"$gte": today_start}})
     today_valid = await db.claims.count_documents({"status": "success", "created_at": {"$gte": today_start}})

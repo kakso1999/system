@@ -1,8 +1,19 @@
 import axios from "axios";
-import Cookies from "js-cookie";
-import { setAuth, clearAuth } from "@/lib/auth";
+import { clearAuth, getRefreshToken, getRole, getToken, setAuth } from "@/lib/auth";
 
-const baseURL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3005";
+const FALLBACK_API_URL = "http://localhost:3005";
+const baseURL = (process.env.NEXT_PUBLIC_API_URL || FALLBACK_API_URL).replace(/\/+$/, "");
+
+export function resolveApiUrl(path?: string | null) {
+  if (!path) {
+    return "";
+  }
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${baseURL}${normalizedPath}`;
+}
 
 const api = axios.create({
   baseURL,
@@ -15,7 +26,7 @@ const refreshClient = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = Cookies.get("token");
+  const token = getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -35,8 +46,12 @@ function processQueue(error: unknown, token: string | null) {
 
 function redirectToLogin(role?: string) {
   if (typeof window !== "undefined" && !window.location.pathname.includes("login")) {
-    window.location.href = role === "admin" ? "/admin-login" : "/staff-login";
+    window.location.replace(role === "admin" ? "/admin-login" : "/staff-login");
   }
+}
+
+function isLoginCall(url: string) {
+  return url.includes("/api/auth/admin/login") || url.includes("/api/auth/staff/login");
 }
 
 api.interceptors.response.use(
@@ -47,13 +62,17 @@ api.interceptors.response.use(
       url?: string;
       headers?: Record<string, string>;
     } | undefined;
-    const role = Cookies.get("role");
+    const role = getRole();
 
     if (err.response?.status !== 401 || !originalRequest) {
       return Promise.reject(err);
     }
 
     const url = String(originalRequest.url || "");
+    if (isLoginCall(url)) {
+      return Promise.reject(err);
+    }
+
     const isRefreshCall = url.includes("/api/auth/admin/refresh") || url.includes("/api/auth/staff/refresh");
     if (isRefreshCall || originalRequest._retry) {
       clearAuth();
@@ -61,7 +80,7 @@ api.interceptors.response.use(
       return Promise.reject(err);
     }
 
-    const refreshToken = Cookies.get("refresh_token");
+    const refreshToken = getRefreshToken();
     if (refreshToken && role) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {

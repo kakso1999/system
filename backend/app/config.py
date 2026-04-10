@@ -1,5 +1,9 @@
-from pydantic_settings import BaseSettings
 from functools import lru_cache
+from pydantic_settings import BaseSettings
+
+
+def parse_csv_setting(value: str) -> list[str]:
+    return [item.strip().rstrip("/") for item in value.split(",") if item.strip()]
 
 
 class Settings(BaseSettings):
@@ -12,13 +16,18 @@ class Settings(BaseSettings):
     DEFAULT_ADMIN_USERNAME: str = "admin"
     DEFAULT_ADMIN_PASSWORD: str = "admin123"
     SMS_ENABLED: bool = False
-    CORS_ORIGINS: str = "http://localhost:3000"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3006"
+    REPORT_TIMEZONE: str = "Asia/Manila"
     # Tencent Cloud SMS
     TENCENT_SECRET_ID: str = ""
     TENCENT_SECRET_KEY: str = ""
     TENCENT_SMS_SDK_APP_ID: str = ""
     TENCENT_SMS_TEMPLATE_ID: str = ""
     TENCENT_SMS_SIGN_NAME: str = ""
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return parse_csv_setting(self.CORS_ORIGINS)
 
     class Config:
         env_file = ".env"

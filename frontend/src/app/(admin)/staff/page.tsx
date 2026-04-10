@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { UserPlus } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import type { PageResponse, Staff } from "@/types";
 import StaffFormModal from "./staff-form-modal";
@@ -18,9 +18,16 @@ type StaffFormValues = {
   password: string;
 };
 
+type StaffListQuery = {
+  page: number;
+  search: string;
+  statusFilter: string;
+};
+
 const emptyForm: StaffFormValues = { name: "", phone: "", username: "", password: "" };
 
 export default function StaffManagementPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [treeRoots, setTreeRoots] = useState<Staff[]>([]);
@@ -39,12 +46,15 @@ export default function StaffManagementPage() {
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [form, setForm] = useState<StaffFormValues>(emptyForm);
 
-  const loadStaff = useCallback(async () => {
+  const loadStaff = useCallback(async (nextQuery?: Partial<StaffListQuery>) => {
+    const currentPage = nextQuery?.page ?? page;
+    const currentSearch = nextQuery?.search ?? search;
+    const currentStatusFilter = nextQuery?.statusFilter ?? statusFilter;
     setLoading(true);
     try {
-      const params: Record<string, string | number> = { page, page_size: 20 };
-      if (search) params.search = search;
-      if (statusFilter) params.status = statusFilter;
+      const params: Record<string, string | number> = { page: currentPage, page_size: 20 };
+      if (currentSearch) params.search = currentSearch;
+      if (currentStatusFilter) params.status = currentStatusFilter;
       const [listRes, pendingRes] = await Promise.all([
         api.get<PageResponse<Staff>>("/api/admin/staff/", { params }),
         api.get<PageResponse<Staff>>("/api/admin/staff/", {
@@ -56,6 +66,7 @@ export default function StaffManagementPage() {
       setPendingCount(pendingRes.data.total);
     } catch {
       setStaffList([]);
+      setTotal(0);
       setPendingCount(0);
     } finally {
       setLoading(false);
@@ -81,9 +92,9 @@ export default function StaffManagementPage() {
     setLoadingIds(new Set());
   }, []);
 
-  const refreshAllData = useCallback(async () => {
+  const refreshAllData = useCallback(async (nextQuery?: Partial<StaffListQuery>) => {
     resetTreeState();
-    await Promise.all([loadStaff(), loadTree()]);
+    await Promise.all([loadStaff(nextQuery), loadTree()]);
   }, [loadStaff, loadTree, resetTreeState]);
 
   useEffect(() => {
@@ -110,13 +121,19 @@ export default function StaffManagementPage() {
           name: form.name,
           phone: form.phone,
         });
+        await refreshAllData();
       } else {
         await api.post("/api/admin/staff/", form);
+        const nextQuery = { page: 1, search: "", statusFilter: "" };
+        setPage(nextQuery.page);
+        setSearch(nextQuery.search);
+        setStatusFilter(nextQuery.statusFilter);
+        router.replace("/staff");
+        await refreshAllData(nextQuery);
       }
       setShowModal(false);
       setEditingStaff(null);
       setForm(emptyForm);
-      await refreshAllData();
     } catch (error: unknown) {
       const axiosErr = error as { response?: { data?: { detail?: string } } };
       alert(axiosErr.response?.data?.detail || "Operation failed");
