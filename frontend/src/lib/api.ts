@@ -1,8 +1,8 @@
 import axios from "axios";
 import { clearAuth, getRefreshToken, getRole, getToken, setAuth } from "@/lib/auth";
 
-const FALLBACK_API_URL = "http://localhost:3005";
-const baseURL = (process.env.NEXT_PUBLIC_API_URL || FALLBACK_API_URL).replace(/\/+$/, "");
+const FALLBACK_API_URL = "";
+const baseURL = (process.env.NEXT_PUBLIC_API_URL ?? FALLBACK_API_URL).replace(/\/+$/, "");
 
 export function resolveApiUrl(path?: string | null) {
   if (!path) {

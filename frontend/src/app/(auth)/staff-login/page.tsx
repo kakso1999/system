@@ -20,7 +20,7 @@ export default function StaffLoginPage() {
     try {
       const res = await api.post("/api/auth/staff/login", { username, password });
       setAuth(res.data.access_token, "staff", res.data.refresh_token);
-      router.replace("/home");
+      window.location.href = "/home";
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { detail?: string } } };
       setError(axiosErr.response?.data?.detail || "Login failed");

@@ -20,7 +20,7 @@ export default function AdminLoginPage() {
     try {
       const res = await api.post("/api/auth/admin/login", { username, password });
       setAuth(res.data.access_token, "admin", res.data.refresh_token);
-      router.replace("/dashboard");
+      window.location.href = "/dashboard";
     } catch (err: unknown) {
       console.error("Login error:", err);
       const axiosErr = err as { response?: { data?: { detail?: string } }; message?: string };
