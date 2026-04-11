@@ -1,81 +1,20 @@
-[17:47:38] Codex task started
-[17:47:38] Working dir: C:\Users\Administrator\AppData\Local\Temp\codex-worktrees\auth-isolation-1775900858
-[17:47:38] Timeout: 900s
+[18:20:52] Codex task started
+[18:20:52] Working dir: C:\Users\Administrator\AppData\Local\Temp\codex-worktrees\merge-fix-branch-1775902852
+[18:20:52] Timeout: 900s
 
-[17:56:36] Codex finished with rc=0
-[17:56:37] Files changed: 6
+[18:35:57] Codex finished with rc=-1
+[18:35:57] Files changed: 11
+  - backend/app/routers/staff.py
   - codex_progress.log
-  - frontend/src/app/(admin)/layout.tsx
-  - frontend/src/app/(promoter)/home/page.tsx
-  - frontend/src/app/(promoter)/layout.tsx
+  - frontend/next.config.ts
+  - frontend/src/app/(admin)/staff/page.tsx
+  - frontend/src/app/(admin)/staff/staff-management-content.tsx
+  - frontend/src/app/(admin)/staff/staff-table.tsx
+  - frontend/src/app/(auth)/admin-login/page.tsx
+  - frontend/src/app/(auth)/staff-login/page.tsx
+  - frontend/src/app/(auth)/staff-register/page.tsx
   - frontend/src/lib/api.ts
-  - frontend/src/lib/auth.ts
+  - frontend/src/middleware.ts
 
 Stderr:
-x}_${name}`;
-+}
-+
-+export function setAuth(token: string, role: AuthRole, refreshToken?: string) {
-+  const options = getCookieOptions();
-+  Cookies.set(getCookieName(role, "token"), token, options);
-+  Cookies.set(getCookieName(role, "role"), role, options);
-+  if (refreshToken) {
-+    Cookies.set(getCookieName(role, "refresh_token"), refreshToken, options);
-+    return;
-+  }
-+  Cookies.remove(getCookieName(role, "refresh_token"), getCookieRemovalOptions());
-+}
-+
-+export function clearAuth(role?: string) {
-+  const options = getCookieRemovalOptions();
-+  const prefixes = role ? [role] : AUTH_ROLES;
-+  prefixes.forEach((prefix) => {
-+    Cookies.remove(getCookieName(prefix, "token"), options);
-+    Cookies.remove(getCookieName(prefix, "role"), options);
-+    Cookies.remove(getCookieName(prefix, "refresh_token"), options);
-+  });
-+}
-+
-+export function getRole(): string | undefined {
-+  if (Cookies.get(getCookieName("admin", "token"))) {
-+    return "admin";
-+  }
-+  if (Cookies.get(getCookieName("staff", "token"))) {
-+    return "staff";
-+  }
-+  return undefined;
-+}
-+
-+export function getToken(role?: string): string | undefined {
-+  if (role) {
-+    return Cookies.get(getCookieName(role, "token"));
-+  }
-+  return getAdminToken() || getStaffToken();
-+}
-+
-+export function getRefreshToken(role?: string): string | undefined {
-+  if (role) {
-+    return Cookies.get(getCookieName(role, "refresh_token"));
-+  }
-+  const currentRole = getRole();
-+  return currentRole ? Cookies.get(getCookieName(currentRole, "refresh_token")) : undefined;
-+}
-+
-+export function isAuthenticated(role?: string): boolean {
-+  if (role) {
-+    return !!Cookies.get(getCookieName(role, "token"));
-+  }
-+  return !!getAdminToken() || !!getStaffToken();
-+}
-+
-+export function getAdminToken(): string | undefined {
-+  return Cookies.get(getCookieName("admin", "token"));
-+}
-+
-+export function getStaffToken(): string | undefined {
-+  return Cookies.get(getCookieName("staff", "token"));
-+}
-
-tokens used
-108,674
-
+Timeout: codex did not finish within 900s

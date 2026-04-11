@@ -17,15 +17,8 @@ type RefreshState = {
   failedQueue: QueueItem[];
 };
 
-function getDefaultApiUrl(): string {
-  if (typeof window !== "undefined") {
-    const { protocol, hostname } = window.location;
-    return `${protocol}//${hostname}:3005`;
-  }
-  return "http://localhost:3005";
-}
-
-const baseURL = (process.env.NEXT_PUBLIC_API_URL || getDefaultApiUrl()).replace(/\/+$/, "");
+const FALLBACK_API_URL = "";
+const baseURL = (process.env.NEXT_PUBLIC_API_URL ?? FALLBACK_API_URL).replace(/\/+$/, "");
 
 export function resolveApiUrl(path?: string | null) {
   if (!path) {

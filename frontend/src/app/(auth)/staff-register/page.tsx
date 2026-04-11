@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { BadgeCheck, User, Phone, Lock, Ticket, UserPlus } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 
-export default function StaffRegisterPage() {
+function StaffRegisterForm() {
   const searchParams = useSearchParams();
   const inviteFromUrl = searchParams.get("invite") || "";
   const [name, setName] = useState("");
@@ -152,5 +152,13 @@ export default function StaffRegisterPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function StaffRegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-surface text-on-surface-variant">Loading...</div>}>
+      <StaffRegisterForm />
+    </Suspense>
   );
 }

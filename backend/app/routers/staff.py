@@ -70,6 +70,50 @@ async def count_direct_children(db: AsyncIOMotorDatabase, staff_id: ObjectId) ->
     return await db.staff_relations.count_documents({"ancestor_id": staff_id, "level": 1})
 
 
+async def document_exists(collection, query: dict) -> bool:
+    return await collection.find_one(query, {"_id": 1}) is not None
+
+
+async def get_delete_blockers(db: AsyncIOMotorDatabase, staff_obj_id: ObjectId) -> list[str]:
+    blockers: list[str] = []
+    has_team_members = await document_exists(db.staff_users, {"parent_id": staff_obj_id})
+    if not has_team_members:
+        has_team_members = await document_exists(db.staff_relations, {"ancestor_id": staff_obj_id})
+    if has_team_members:
+        blockers.append("team members")
+
+    checks = [
+        ("claims", db.claims, {"staff_id": staff_obj_id}),
+        ("commission logs", db.commission_logs, {"$or": [{"source_staff_id": staff_obj_id}, {"beneficiary_staff_id": staff_obj_id}]}),
+        ("reward codes", db.reward_codes, {"staff_id": staff_obj_id}),
+        ("scan logs", db.scan_logs, {"staff_id": staff_obj_id}),
+        ("withdrawal requests", db.withdrawal_requests, {"staff_id": staff_obj_id}),
+        ("team rewards", db.team_rewards, {"staff_id": staff_obj_id}),
+        ("VIP upgrade logs", db.vip_upgrade_logs, {"staff_id": staff_obj_id}),
+    ]
+    for label, collection, query in checks:
+        if await document_exists(collection, query):
+            blockers.append(label)
+    return blockers
+
+
+async def ensure_staff_can_be_deleted(db: AsyncIOMotorDatabase, staff_obj_id: ObjectId) -> None:
+    blockers = await get_delete_blockers(db, staff_obj_id)
+    if blockers:
+        joined = ", ".join(blockers)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete staff with related {joined}",
+        )
+
+
+async def delete_staff_dependencies(db: AsyncIOMotorDatabase, staff_obj_id: ObjectId) -> None:
+    await db.staff_payout_accounts.delete_many({"staff_id": staff_obj_id})
+    await db.staff_relations.delete_many(
+        {"$or": [{"staff_id": staff_obj_id}, {"ancestor_id": staff_obj_id}]}
+    )
+
+
 @router.get("/", response_model=PageResponse)
 async def list_staff(
     page: int = Query(1, ge=1),
@@ -230,3 +274,15 @@ async def reset_staff_password(
         },
     )
     return MessageResponse(message="Password reset successfully")
+
+
+@router.delete("/{staff_id}", response_model=MessageResponse)
+async def delete_staff(
+    staff_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> MessageResponse:
+    staff = await get_staff_or_404(db, staff_id)
+    await ensure_staff_can_be_deleted(db, staff["_id"])
+    await delete_staff_dependencies(db, staff["_id"])
+    await db.staff_users.delete_one({"_id": staff["_id"]})
+    return MessageResponse(message="Staff deleted successfully")
