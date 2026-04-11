@@ -1,10 +1,9 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { clearAuth } from "@/lib/auth";
+import { clearAuth, getAdminToken } from "@/lib/auth";
 import { useEffect, useState } from "react";
 import { LayoutDashboard, Users, Megaphone, Receipt, Wallet, Shield, Settings, ChevronLeft, ChevronRight, LogOut, ShieldCheck } from "lucide-react";
-import Cookies from "js-cookie";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
@@ -23,10 +22,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
-    const token = Cookies.get("token");
-    const role = Cookies.get("role");
-    if (!token || role !== "admin") {
-      clearAuth();
+    const token = getAdminToken();
+    if (!token) {
+      clearAuth("admin");
       router.replace("/admin-login");
       return;
     }
@@ -34,7 +32,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [router]);
 
   const handleLogout = () => {
-    clearAuth();
+    clearAuth("admin");
     router.push("/admin-login");
   };
 
