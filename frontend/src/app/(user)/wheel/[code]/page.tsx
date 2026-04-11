@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ChevronDown, PartyPopper, LockOpen, CheckCircle, AlertCircle } from "lucide-react";
 import api from "@/lib/api";
+import { copyToClipboard } from "@/lib/clipboard";
 
 interface WheelItemData {
   id: string;
@@ -487,7 +488,7 @@ export default function WheelPage() {
                     <p className="text-xs font-bold text-outline uppercase tracking-wider mb-1">Your Reward Code</p>
                     <p className="font-mono text-2xl font-extrabold text-primary tracking-wider">{claimResult.reward_code}</p>
                     <button
-                      onClick={() => navigator.clipboard.writeText(claimResult.reward_code!)}
+                      onClick={() => copyToClipboard(claimResult.reward_code!)}
                       className="mt-2 text-xs text-primary font-bold hover:underline"
                     >
                       Copy Code

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { AlertCircle, CheckCircle, XCircle, Gift, Star } from "lucide-react";
 import api from "@/lib/api";
+import { copyToClipboard } from "@/lib/clipboard";
 
 interface ClaimResult {
   id: string;
@@ -83,7 +84,7 @@ export default function ResultPage() {
                 <p className="text-xs font-extrabold text-primary uppercase tracking-[0.2em] mb-2">Your Reward Code</p>
                 <p className="font-mono text-3xl font-extrabold text-primary tracking-wider">{data.reward_code}</p>
                 <button
-                  onClick={() => navigator.clipboard.writeText(data.reward_code!)}
+                  onClick={() => copyToClipboard(data.reward_code!)}
                   className="mt-3 text-sm text-primary font-bold hover:underline"
                 >
                   Copy Code

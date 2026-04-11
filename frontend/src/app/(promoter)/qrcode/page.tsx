@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Copy } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import api from "@/lib/api";
+import { copyToClipboard } from "@/lib/clipboard";
 
 export default function QRCodePage() {
   const router = useRouter();
@@ -23,8 +24,8 @@ export default function QRCodePage() {
 
   const qrUrl = qrData && typeof window !== "undefined" ? `${window.location.origin}${qrData.qr_data}` : "";
 
-  const copyLink = () => {
-    navigator.clipboard.writeText(qrUrl);
+  const copyLink = async () => {
+    await copyToClipboard(qrUrl);
     alert("Link copied!");
   };
 

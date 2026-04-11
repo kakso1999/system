@@ -1,15 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ShieldCheck, User, Lock, LogIn } from "lucide-react";
 import api from "@/lib/api";
-import { setAuth } from "@/lib/auth";
+import { setAuth, clearAuth } from "@/lib/auth";
 
 export default function AdminLoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // 清除旧格式和新格式的所有 cookie，防止残留干扰
+    clearAuth();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

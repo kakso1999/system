@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
+import { copyToClipboard } from "@/lib/clipboard";
 import type { PageResponse, Staff } from "@/types";
 import { Users, Copy, UserPlus } from "lucide-react";
 
@@ -90,7 +91,7 @@ export default function TeamPage() {
           </div>
           <button
             onClick={() => {
-              navigator.clipboard.writeText(`${window.location.origin}/staff-register?invite=${inviteCode}`);
+              copyToClipboard(`${window.location.origin}/staff-register?invite=${inviteCode}`);
               alert("Invite link copied!");
             }}
             className="w-full bg-secondary text-on-secondary py-2.5 rounded-full font-bold text-sm flex items-center justify-center gap-2 shadow-sm hover:shadow-md active:scale-[0.98] transition-all"

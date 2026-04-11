@@ -48,6 +48,10 @@ export function clearAuth(role?: string) {
     Cookies.remove(getCookieName(prefix, "role"), options);
     Cookies.remove(getCookieName(prefix, "refresh_token"), options);
   });
+  // 清除旧格式 cookie 残留
+  Cookies.remove("token", options);
+  Cookies.remove("role", options);
+  Cookies.remove("refresh_token", options);
 }
 
 export function getRole(): string | undefined {
