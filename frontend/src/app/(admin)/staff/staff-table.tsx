@@ -73,7 +73,8 @@ export default function StaffTable(props: StaffTableProps) {
                         {staff.status === "active" ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
                       </button>
                     )}
-                    <button onClick={() => onDelete(staff)}
+                    <button
+                      onClick={() => onDelete(staff)}
                       className="text-error hover:bg-error/10 p-1.5 rounded-lg transition-colors"
                       title="删除"
                     >

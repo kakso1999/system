@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { BadgeCheck, User, Lock, LogIn } from "lucide-react";
 import api from "@/lib/api";
 import { setAuth } from "@/lib/auth";
 
 export default function StaffLoginPage() {
-  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
