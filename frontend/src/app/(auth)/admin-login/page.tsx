@@ -20,8 +20,9 @@ export default function AdminLoginPage() {
       setAuth(res.data.access_token, "admin", res.data.refresh_token);
       window.location.href = "/dashboard";
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { detail?: string } } };
-      setError(axiosErr.response?.data?.detail || "Login failed");
+      console.error("Login error:", err);
+      const axiosErr = err as { response?: { data?: { detail?: string } }; message?: string };
+      setError(axiosErr.response?.data?.detail || axiosErr.message || "Login failed");
     } finally {
       setLoading(false);
     }

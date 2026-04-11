@@ -6,7 +6,6 @@ import api from "@/lib/api";
 import type { Campaign, PageResponse, WheelItem, Staff } from "@/types";
 
 type ModalMode = "create" | "edit" | "wheel" | "staff" | null;
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface StaffPrizeStat {
   wheel_item_id: string;
@@ -441,7 +440,7 @@ export default function CampaignsPage() {
                     <div key={w.id} className={`flex items-center justify-between p-3 rounded-xl ${w.enabled ? "bg-surface-container-low" : "bg-surface-container-low/50 opacity-60"}`}>
                       <div className="flex items-center gap-3 flex-wrap">
                         {w.image_url ? (
-                          <img src={`${API_BASE}${w.image_url}`} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                          <img src={w.image_url} alt="" className="w-10 h-10 rounded-lg object-cover" />
                         ) : (
                           <div className="w-10 h-10 rounded-lg bg-surface-variant flex items-center justify-center">
                             <Gift className="w-5 h-5 text-outline" />

@@ -1,4 +1,4 @@
-import { Ban, CheckCircle, Pencil, XCircle } from "lucide-react";
+import { Ban, CheckCircle, Pencil, Trash2, XCircle } from "lucide-react";
 import type { Staff } from "@/types";
 import { statusBadge, vipLabel } from "./staff-shared";
 
@@ -7,10 +7,11 @@ interface StaffTableProps {
   staffList: Staff[];
   onEdit: (staff: Staff) => void;
   onUpdateStatus: (staff: Staff, newStatus: "active" | "disabled") => void;
+  onDelete: (staff: Staff) => void;
 }
 
 export default function StaffTable(props: StaffTableProps) {
-  const { loading, staffList, onEdit, onUpdateStatus } = props;
+  const { loading, staffList, onEdit, onUpdateStatus, onDelete } = props;
 
   return (
     <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
@@ -46,7 +47,7 @@ export default function StaffTable(props: StaffTableProps) {
                 <td className="px-6 py-4">{statusBadge(staff.status)}</td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2">
-                    <button onClick={() => onEdit(staff)} className="text-primary hover:bg-primary/10 p-1.5 rounded-lg transition-colors">
+                    <button onClick={() => onEdit(staff)} className="text-primary hover:bg-primary/10 p-1.5 rounded-lg transition-colors" title="编辑">
                       <Pencil className="w-4 h-4" />
                     </button>
                     {staff.status === "pending_review" ? (
@@ -67,10 +68,17 @@ export default function StaffTable(props: StaffTableProps) {
                     ) : (
                       <button onClick={() => onUpdateStatus(staff, staff.status === "active" ? "disabled" : "active")}
                         className={`${staff.status === "active" ? "text-error hover:bg-error/10" : "text-green-600 hover:bg-green-50"} p-1.5 rounded-lg transition-colors`}
+                        title={staff.status === "active" ? "禁用" : "启用"}
                       >
                         {staff.status === "active" ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
                       </button>
                     )}
+                    <button onClick={() => onDelete(staff)}
+                      className="text-error hover:bg-error/10 p-1.5 rounded-lg transition-colors"
+                      title="删除"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </td>
               </tr>

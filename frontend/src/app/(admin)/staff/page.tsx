@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { UserPlus } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import api from "@/lib/api";
@@ -20,7 +20,7 @@ type StaffFormValues = {
 
 const emptyForm: StaffFormValues = { name: "", phone: "", username: "", password: "" };
 
-export default function StaffManagementPage() {
+function StaffManagementContent() {
   const searchParams = useSearchParams();
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [treeRoots, setTreeRoots] = useState<Staff[]>([]);
@@ -129,6 +129,16 @@ export default function StaffManagementPage() {
       await refreshAllData();
     } catch {
       alert("Failed to update status");
+    }
+  };
+
+  const deleteStaff = async (staff: Staff) => {
+    if (!confirm(`确认删除地推员「${staff.name}」？此操作不可恢复。`)) return;
+    try {
+      await api.delete(`/api/admin/staff/${staff.id}`);
+      await refreshAllData();
+    } catch {
+      alert("删除失败");
     }
   };
 
@@ -247,6 +257,7 @@ export default function StaffManagementPage() {
             staffList={staffList}
             onEdit={openEdit}
             onUpdateStatus={updateStatus}
+            onDelete={deleteStaff}
           />
         </>
       )}
@@ -284,5 +295,13 @@ export default function StaffManagementPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function StaffManagementPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-20 text-on-surface-variant">加载中...</div>}>
+      <StaffManagementContent />
+    </Suspense>
   );
 }

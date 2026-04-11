@@ -2,7 +2,7 @@ import axios from "axios";
 import Cookies from "js-cookie";
 import { setAuth, clearAuth } from "@/lib/auth";
 
-const baseURL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3005";
+const baseURL = "";
 
 const api = axios.create({
   baseURL,

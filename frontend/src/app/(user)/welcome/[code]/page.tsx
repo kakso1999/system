@@ -22,8 +22,6 @@ interface WelcomeData {
 
 type Step = "welcome" | "prizes" | "wheel";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
 export default function WelcomePage() {
   const params = useParams();
   const router = useRouter();
@@ -163,7 +161,7 @@ export default function WelcomePage() {
                     {/* Prize image or gradient */}
                     {item.image_url ? (
                       <div className="w-full h-3/5 bg-surface-container-low">
-                        <img src={`${API_BASE}${item.image_url}`} alt={item.display_name}
+                        <img src={item.image_url} alt={item.display_name}
                           className="w-full h-full object-cover" />
                       </div>
                     ) : (

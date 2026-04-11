@@ -230,3 +230,16 @@ async def reset_staff_password(
         },
     )
     return MessageResponse(message="Password reset successfully")
+
+
+@router.delete("/{staff_id}", response_model=MessageResponse)
+async def delete_staff(
+    staff_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> MessageResponse:
+    staff = await get_staff_or_404(db, staff_id)
+    await db.staff_relations.delete_many(
+        {"$or": [{"staff_id": staff["_id"]}, {"ancestor_id": staff["_id"]}]}
+    )
+    await db.staff_users.delete_one({"_id": staff["_id"]})
+    return MessageResponse(message="Staff deleted successfully")
