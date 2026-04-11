@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ShieldCheck, User, Lock, LogIn } from "lucide-react";
 import api from "@/lib/api";
 import { setAuth } from "@/lib/auth";
 
 export default function AdminLoginPage() {
+  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -18,7 +20,7 @@ export default function AdminLoginPage() {
     try {
       const res = await api.post("/api/auth/admin/login", { username, password });
       setAuth(res.data.access_token, "admin", res.data.refresh_token);
-      window.location.href = "/dashboard";
+      router.replace("/dashboard");
     } catch (err: unknown) {
       console.error("Login error:", err);
       const axiosErr = err as { response?: { data?: { detail?: string } }; message?: string };

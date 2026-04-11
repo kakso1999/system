@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AlertCircle, ChevronRight, Gift, Star, Sparkles } from "lucide-react";
 import confetti from "canvas-confetti";
-import api from "@/lib/api";
+import api, { resolveApiUrl } from "@/lib/api";
 
 interface WheelItemData {
   id: string;
@@ -161,7 +161,7 @@ export default function WelcomePage() {
                     {/* Prize image or gradient */}
                     {item.image_url ? (
                       <div className="w-full h-3/5 bg-surface-container-low">
-                        <img src={item.image_url} alt={item.display_name}
+                        <img src={resolveApiUrl(item.image_url)} alt={item.display_name}
                           className="w-full h-full object-cover" />
                       </div>
                     ) : (

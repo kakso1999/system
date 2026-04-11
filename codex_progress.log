@@ -1,24 +1,23 @@
-[11:38:39] Codex task started
-[11:38:39] Working dir: C:\Users\Administrator\AppData\Local\Temp\codex-worktrees\audit-v2-1775792318
-[11:38:39] Timeout: 900s
+[17:48:39] Codex task started
+[17:48:39] Working dir: C:\Users\Administrator\AppData\Local\Temp\codex-worktrees\prod-bugs-1775814519
+[17:48:39] Timeout: 900s
 
-[12:45:49] Codex finished with rc=-1
-[12:45:50] Files changed: 15
-  - backend/app/database.py
-  - backend/app/dependencies.py
-  - backend/app/routers/admin_auth.py
-  - backend/app/routers/campaigns.py
-  - backend/app/routers/finance.py
+[18:20:46] Codex finished with rc=-1
+[18:20:47] Files changed: 14
+  - backend/.env.example
+  - backend/app/config.py
+  - backend/app/main.py
+  - backend/app/routers/dashboard.py
   - backend/app/routers/promoter.py
-  - backend/app/routers/risk_control.py
-  - backend/app/routers/settings.py
-  - backend/app/routers/staff_auth.py
-  - backend/app/routers/user_flow.py
-  - backend/app/services/commission.py
-  - backend/app/services/withdrawals.py
+  - backend/app/utils/datetime.py
   - codex_progress.log
-  - frontend/src/app/(admin)/claims/page.tsx
-  - frontend/src/app/(admin)/layout.tsx
+  - frontend/src/app/(admin)/campaigns/page.tsx
+  - frontend/src/app/(admin)/staff/page.tsx
+  - frontend/src/app/(auth)/admin-login/page.tsx
+  - frontend/src/app/(auth)/staff-login/page.tsx
+  - frontend/src/app/(user)/welcome/[code]/page.tsx
+  - frontend/src/lib/api.ts
+  - frontend/src/lib/auth.ts
 
 Stderr:
 Timeout: codex did not finish within 900s

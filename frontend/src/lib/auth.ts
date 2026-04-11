@@ -1,19 +1,42 @@
 import Cookies from "js-cookie";
 
-const COOKIE_OPTS = { expires: 7, path: "/", sameSite: "lax" as const };
+function isSecureContext() {
+  return typeof window !== "undefined" && window.location.protocol === "https:";
+}
+
+function getCookieOptions() {
+  return {
+    expires: 7,
+    path: "/",
+    sameSite: "lax" as const,
+    secure: isSecureContext(),
+  };
+}
+
+function getCookieRemovalOptions() {
+  return {
+    path: "/",
+    sameSite: "lax" as const,
+    secure: isSecureContext(),
+  };
+}
 
 export function setAuth(token: string, role: "admin" | "staff", refreshToken?: string) {
-  Cookies.set("token", token, COOKIE_OPTS);
-  Cookies.set("role", role, COOKIE_OPTS);
+  const options = getCookieOptions();
+  Cookies.set("token", token, options);
+  Cookies.set("role", role, options);
   if (refreshToken) {
-    Cookies.set("refresh_token", refreshToken, COOKIE_OPTS);
+    Cookies.set("refresh_token", refreshToken, options);
+    return;
   }
+  Cookies.remove("refresh_token", getCookieRemovalOptions());
 }
 
 export function clearAuth() {
-  Cookies.remove("token", { path: "/" });
-  Cookies.remove("role", { path: "/" });
-  Cookies.remove("refresh_token", { path: "/" });
+  const options = getCookieRemovalOptions();
+  Cookies.remove("token", options);
+  Cookies.remove("role", options);
+  Cookies.remove("refresh_token", options);
 }
 
 export function getRole(): string | undefined {

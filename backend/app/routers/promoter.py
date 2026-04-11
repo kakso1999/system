@@ -12,6 +12,7 @@ from app.services.withdrawals import (
     get_payout_account_or_404,
     get_withdrawal_balance_snapshot,
 )
+from app.utils.datetime import get_day_start_utc
 from app.utils.helpers import to_str_id, to_str_ids
 
 router = APIRouter()
@@ -54,7 +55,7 @@ async def home(
 ):
     staff = current_staff
     sid = staff["_id"]
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = get_day_start_utc()
     today_scans = await db.scan_logs.count_documents({"staff_id": sid, "created_at": {"$gte": today_start}})
     today_valid = await db.claims.count_documents({"staff_id": sid, "status": "success", "created_at": {"$gte": today_start}})
 
