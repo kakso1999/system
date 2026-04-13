@@ -18,6 +18,7 @@ async def get_risk_settings(db: AsyncIOMotorDatabase = Depends(get_db)):
 ALLOWED_RISK_KEYS = {
     "risk_phone_unique", "risk_ip_unique",
     "risk_device_unique", "sms_verification",
+    "sms_real_send_enabled",
 }
 
 

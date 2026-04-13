@@ -298,13 +298,17 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
     # Generate 6-digit OTP using cryptographically secure random
     code = str(secrets.randbelow(900000) + 100000)
 
-    # Send via Tencent Cloud SMS first, only record if successful
-    sms_result = send_sms(phone, code, "10")
-    if not sms_result["success"]:
-        return {"verified": False, "message": f"SMS send failed: {sms_result['message']}",
-                "sms_error": True}
+    # Check if real SMS sending is enabled
+    sms_real = await get_setting(db, "sms_real_send_enabled")
 
-    # Record OTP only after successful send (HIGH-2 fix)
+    if sms_real:
+        # Real SMS mode: send first, record only on success
+        sms_result = await send_sms(db, phone, code, "10")
+        if not sms_result["success"]:
+            return {"verified": False, "message": f"SMS send failed: {sms_result['message']}",
+                    "sms_error": True}
+
+    # Record OTP (both demo and real modes)
     now = datetime.now(timezone.utc)
     await db.otp_records.insert_one({
         "phone": phone, "code": code, "used": False,
@@ -315,7 +319,11 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
         "created_at": now,
     })
 
-    return {"verified": False, "message": "OTP sent", "otp_sent": True}
+    if sms_real:
+        return {"verified": False, "message": "OTP sent", "otp_sent": True}
+    else:
+        # Demo mode: return code to frontend for display
+        return {"verified": False, "message": "OTP sent (test mode)", "otp_sent": True, "demo_code": code}
 
 
 @router.post("/verify-otp")

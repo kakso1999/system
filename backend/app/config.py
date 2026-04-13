@@ -18,12 +18,6 @@ class Settings(BaseSettings):
     SMS_ENABLED: bool = False
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3006"
     REPORT_TIMEZONE: str = "Asia/Manila"
-    # Tencent Cloud SMS
-    TENCENT_SECRET_ID: str = ""
-    TENCENT_SECRET_KEY: str = ""
-    TENCENT_SMS_SDK_APP_ID: str = ""
-    TENCENT_SMS_TEMPLATE_ID: str = ""
-    TENCENT_SMS_SIGN_NAME: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

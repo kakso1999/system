@@ -1,0 +1,60 @@
+============================================
+GroundRewards SMS 服务配置说明
+============================================
+
+一、SMS 服务架构
+-----------
+使用自定义 HTTP API 发送短信（与 162_1 项目一致）。
+API 地址默认: http://101.44.162.101:9090/sms/batch/v1
+签名算法: MD5(appkey + appsecret + timestamp)
+
+二、配置位置
+-----------
+所有 SMS 配置项存储在 MongoDB system_settings 集合中，
+可通过管理后台"风控设置"或直接修改数据库管理。
+
+三、配置项一览
+--------------
+| 配置键                | 默认值 | 说明 |
+|----------------------|--------|------|
+| sms_verification     | false  | 是否需要手机号验证（总开关） |
+| sms_real_send_enabled| false  | 是否真正发短信（false=演示模式，页面弹窗显示验证码） |
+| sms_api_url          | http://101.44.162.101:9090/sms/batch/v1 | 短信 API 地址 |
+| sms_appkey           | (空)   | 短信服务 appkey |
+| sms_appcode          | (空)   | 短信服务 appcode |
+| sms_appsecret        | (空)   | 短信服务 appsecret |
+| sms_extend           | (空)   | 扩展字段 |
+| sms_signature        | GroundRewards | 短信签名 |
+| sms_otp_template     | [{signature}] Your OTP code is {code}. Valid for 10 minutes. | 短信模板 |
+
+四、三种模式说明
+--------------
+1. sms_verification=false: 完全跳过验证，手机号直接通过
+2. sms_verification=true + sms_real_send_enabled=false: 演示模式
+   - 生成验证码并存入数据库
+   - 不发短信，前端弹窗显示验证码
+   - 用户手动输入验证码完成验证
+   - 适用于测试完整流程
+3. sms_verification=true + sms_real_send_enabled=true: 正式模式
+   - 通过 HTTP API 发送短信
+   - 需要配置 appkey/appcode/appsecret
+
+五、开启SMS验证（演示模式）
+--------------------------
+db.system_settings.updateOne({key:"sms_verification"}, {$set:{value:true}})
+# sms_real_send_enabled 默认为 false，无需改动
+
+六、开启正式短信发送
+-------------------
+1. 配置短信服务凭证:
+   db.system_settings.updateOne({key:"sms_appkey"}, {$set:{value:"你的appkey"}})
+   db.system_settings.updateOne({key:"sms_appcode"}, {$set:{value:"你的appcode"}})
+   db.system_settings.updateOne({key:"sms_appsecret"}, {$set:{value:"你的appsecret"}})
+
+2. 开启真实发送:
+   db.system_settings.updateOne({key:"sms_real_send_enabled"}, {$set:{value:true}})
+
+七、启动命令
+-----------
+后端: cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port 3005 --workers 2
+前端: cd frontend && npm run build && npm run start -- -p 3006
