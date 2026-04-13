@@ -176,11 +176,9 @@ async def welcome(staff_code: str, request: Request, db: AsyncIOMotorDatabase = 
         {"campaign_id": campaign["_id"], "enabled": True}
     ).sort("sort_order", 1).to_list(length=50)
 
-    sms_on = await get_setting(db, "sms_verification")
-
     return {
         "staff_name": staff["name"],
-        "sms_enabled": bool(sms_on),
+        "sms_enabled": True,
         "campaign": {
             "id": str(campaign["_id"]), "name": campaign["name"],
             "description": campaign.get("description", ""),
@@ -263,12 +261,6 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
     campaign_id = payload.get("campaign_id", "")
 
     sms_on = await get_setting(db, "sms_verification")
-    if not sms_on:
-        try:
-            validate_phone(phone)
-        except HTTPException:
-            return {"verified": False, "message": "Invalid phone number format"}
-        return {"verified": True, "message": "Phone recorded"}
 
     # Validate phone format
     phone = validate_phone(phone)
@@ -298,10 +290,8 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
     # Generate 6-digit OTP using cryptographically secure random
     code = str(secrets.randbelow(900000) + 100000)
 
-    # Check if real SMS sending is enabled
-    sms_real = await get_setting(db, "sms_real_send_enabled")
-
-    if sms_real:
+    # sms_verification ON = real SMS, OFF = demo mode (popup code)
+    if sms_on:
         # Real SMS mode: send first, record only on success
         sms_result = await send_sms(db, phone, code, "10")
         if not sms_result["success"]:
@@ -319,7 +309,7 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
         "created_at": now,
     })
 
-    if sms_real:
+    if sms_on:
         return {"verified": False, "message": "OTP sent", "otp_sent": True}
     else:
         # Demo mode: return code to frontend for display
@@ -396,20 +386,18 @@ async def complete(
     if staff.get("campaign_id") != cid:
         raise HTTPException(status_code=400, detail="Campaign does not match promoter")
 
-    # SMS verification check (CRIT-2 fix: bind to campaign_id)
-    sms_on = await get_setting(db, "sms_verification")
-    if sms_on:
-        five_min_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
-        verified_otp = await db.otp_records.find_one({
-            "phone": phone,
-            "campaign_id": cid,
-            "used": True,
-            "verified_at": {"$gte": five_min_ago},
-        })
-        if not verified_otp:
-            await log_risk(db, str(cid), phone, ip, device_fp,
-                           "sms_not_verified", "Attempted claim without SMS verification")
-            return {"success": False, "message": "Phone number not verified. Please complete SMS verification first."}
+    # OTP verification check — always required (real SMS or demo mode)
+    five_min_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
+    verified_otp = await db.otp_records.find_one({
+        "phone": phone,
+        "campaign_id": cid,
+        "used": True,
+        "verified_at": {"$gte": five_min_ago},
+    })
+    if not verified_otp:
+        await log_risk(db, str(cid), phone, ip, device_fp,
+                       "sms_not_verified", "Attempted claim without SMS verification")
+        return {"success": False, "message": "Phone number not verified. Please complete SMS verification first."}
 
     # Risk control checks
     hits = await check_risk(db, phone, ip, device_fp, str(cid))

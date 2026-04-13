@@ -35,7 +35,6 @@ async def seed_settings():
         {"key": "risk_ip_unique", "value": True, "group": "risk_control", "description": "IP unique claim"},
         {"key": "risk_device_unique", "value": False, "group": "risk_control", "description": "Device fingerprint unique"},
         {"key": "sms_verification", "value": False, "group": "risk_control", "description": "SMS OTP verification"},
-        {"key": "sms_real_send_enabled", "value": False, "group": "sms_config", "description": "Actually send SMS (off=demo mode)"},
         {"key": "sms_api_url", "value": "http://101.44.162.101:9090/sms/batch/v1", "group": "sms_config", "description": "SMS API endpoint"},
         {"key": "sms_appkey", "value": "9N9Q8M", "group": "sms_config", "description": "SMS appkey"},
         {"key": "sms_appcode", "value": "1000", "group": "sms_config", "description": "SMS appcode"},
