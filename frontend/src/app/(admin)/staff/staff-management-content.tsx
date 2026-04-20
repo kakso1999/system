@@ -22,6 +22,7 @@ type StaffListQuery = {
   page: number;
   search: string;
   statusFilter: string;
+  onlineFilter: "all" | "true" | "false";
 };
 
 const emptyForm: StaffFormValues = { name: "", phone: "", username: "", password: "" };
@@ -44,6 +45,7 @@ export default function StaffManagementContent() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "");
+  const [onlineFilter, setOnlineFilter] = useState<"all" | "true" | "false">("all");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [loading, setLoading] = useState(true);
   const [loadingTree, setLoadingTree] = useState(false);
@@ -55,11 +57,13 @@ export default function StaffManagementContent() {
     const currentPage = nextQuery?.page ?? page;
     const currentSearch = nextQuery?.search ?? search;
     const currentStatusFilter = nextQuery?.statusFilter ?? statusFilter;
+    const currentOnlineFilter = nextQuery?.onlineFilter ?? onlineFilter;
     setLoading(true);
     try {
       const params: Record<string, string | number> = { page: currentPage, page_size: 20 };
       if (currentSearch) params.search = currentSearch;
       if (currentStatusFilter) params.status = currentStatusFilter;
+      if (currentOnlineFilter !== "all") params.online_filter = currentOnlineFilter;
       const [listRes, pendingRes] = await Promise.all([
         api.get<PageResponse<Staff>>("/api/admin/staff/", { params }),
         api.get<PageResponse<Staff>>("/api/admin/staff/", {
@@ -76,7 +80,7 @@ export default function StaffManagementContent() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter]);
+  }, [onlineFilter, page, search, statusFilter]);
 
   const loadTree = useCallback(async () => {
     setLoadingTree(true);
@@ -124,11 +128,12 @@ export default function StaffManagementContent() {
         await api.put(`/api/admin/staff/${editingStaff.id}`, { name: form.name, phone: form.phone });
         await refreshAllData();
       } else {
-        const nextQuery = { page: 1, search: "", statusFilter: "" };
+        const nextQuery = { page: 1, search: "", statusFilter: "", onlineFilter: "all" as const };
         await api.post("/api/admin/staff/", form);
         setPage(nextQuery.page);
         setSearch(nextQuery.search);
         setStatusFilter(nextQuery.statusFilter);
+        setOnlineFilter(nextQuery.onlineFilter);
         router.replace("/staff");
         await refreshAllData(nextQuery);
       }
@@ -254,24 +259,46 @@ export default function StaffManagementContent() {
 
       {viewMode === "list" && (
         <>
-          <div className="flex gap-3">
-            <input
-              type="text"
-              placeholder="搜索姓名 / 手机号 / 编号..."
-              value={search}
-              onChange={(event) => { setSearch(event.target.value); setPage(1); }}
-              className="flex-1 rounded-xl border-none bg-surface-container-lowest px-4 py-3 text-sm transition-all focus:ring-2 focus:ring-primary/40"
-            />
-            <select
-              value={statusFilter}
-              onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}
-              className="rounded-xl border-none bg-surface-container-lowest px-4 py-3 text-sm focus:ring-2 focus:ring-primary/40"
-            >
-              <option value="">全部状态</option>
-              <option value="active">活跃</option>
-              <option value="disabled">禁用</option>
-              <option value="pending_review">待审核</option>
-            </select>
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-1 gap-3">
+              <input
+                type="text"
+                placeholder="搜索姓名 / 手机号 / 编号..."
+                value={search}
+                onChange={(event) => { setSearch(event.target.value); setPage(1); }}
+                className="flex-1 rounded-xl border-none bg-surface-container-lowest px-4 py-3 text-sm transition-all focus:ring-2 focus:ring-primary/40"
+              />
+              <select
+                value={statusFilter}
+                onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}
+                className="rounded-xl border-none bg-surface-container-lowest px-4 py-3 text-sm focus:ring-2 focus:ring-primary/40"
+              >
+                <option value="">全部状态</option>
+                <option value="active">活跃</option>
+                <option value="disabled">禁用</option>
+                <option value="pending_review">待审核</option>
+              </select>
+            </div>
+            <div className="inline-flex self-start rounded-full bg-surface-container-lowest p-1 shadow-sm">
+              <button
+                onClick={() => { setOnlineFilter("all"); setPage(1); }}
+                className={`rounded-full px-4 py-2 text-sm font-bold ${onlineFilter === "all" ? "bg-primary text-on-primary" : "text-on-surface-variant"}`}
+              >
+                全部
+              </button>
+              <button
+                onClick={() => { setOnlineFilter("true"); setPage(1); }}
+                className={`rounded-full px-4 py-2 text-sm font-bold ${onlineFilter === "true" ? "bg-primary text-on-primary" : "text-on-surface-variant"}`}
+              >
+                在线
+              </button>
+              <button
+                onClick={() => { setOnlineFilter("false"); setPage(1); }}
+                className={`rounded-full px-4 py-2 text-sm font-bold ${onlineFilter === "false" ? "bg-primary text-on-primary" : "text-on-surface-variant"}`}
+              >
+                离线
+              </button>
+            </div>
           </div>
 
           <StaffTable loading={loading} staffList={staffList} onEdit={openEdit} onUpdateStatus={updateStatus} onDelete={deleteStaff} />

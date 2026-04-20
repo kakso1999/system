@@ -20,6 +20,17 @@ export interface Staff {
     level3_count: number;
   };
   created_at: string;
+  is_online?: boolean;
+  last_seen_at?: string | null;
+  last_login_at?: string | null;
+  work_status?: "stopped" | "promoting" | "paused";
+  promotion_paused?: boolean;
+  pause_reason?: string;
+  paused_at?: string | null;
+  resumed_at?: string | null;
+  started_promoting_at?: string | null;
+  stopped_promoting_at?: string | null;
+  qr_version?: number;
 }
 
 export interface Campaign {

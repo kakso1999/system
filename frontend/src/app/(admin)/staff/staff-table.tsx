@@ -10,6 +10,21 @@ interface StaffTableProps {
   onDelete: (staff: Staff) => void;
 }
 
+function formatDateShort(iso?: string | null) {
+  if (!iso) return "—";
+
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  const hours = `${date.getHours()}`.padStart(2, "0");
+  const minutes = `${date.getMinutes()}`.padStart(2, "0");
+
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
 export default function StaffTable(props: StaffTableProps) {
   const { loading, staffList, onEdit, onUpdateStatus, onDelete } = props;
 
@@ -26,25 +41,34 @@ export default function StaffTable(props: StaffTableProps) {
             <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">有效量</th>
             <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">佣金</th>
             <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">状态</th>
+            <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">上次登录</th>
             <th className="text-left px-6 py-4 font-bold text-on-surface-variant text-xs uppercase tracking-wider">操作</th>
           </tr>
         </thead>
         <tbody>
           {loading ? (
-            <tr><td colSpan={9} className="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr>
+            <tr><td colSpan={10} className="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr>
           ) : staffList.length === 0 ? (
-            <tr><td colSpan={9} className="px-6 py-8 text-center text-on-surface-variant">暂无数据</td></tr>
+            <tr><td colSpan={10} className="px-6 py-8 text-center text-on-surface-variant">暂无数据</td></tr>
           ) : (
             staffList.map((staff) => (
               <tr key={staff.id} className="border-b border-surface-container-high/50 hover:bg-surface-container-low/50 transition-colors">
                 <td className="px-6 py-4 font-mono text-xs">{staff.staff_no}</td>
-                <td className="px-6 py-4 font-semibold">{staff.name}</td>
+                <td className="px-6 py-4 font-semibold">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`h-2 w-2 rounded-full ring-1 ring-inset ${staff.is_online === true ? "bg-green-500 ring-green-200" : "bg-outline-variant ring-outline-variant"}`}
+                    />
+                    <span>{staff.name}</span>
+                  </div>
+                </td>
                 <td className="px-6 py-4 text-on-surface-variant">{staff.phone}</td>
                 <td className="px-6 py-4 font-mono text-xs text-on-surface-variant">{staff.invite_code || "-"}</td>
                 <td className="px-6 py-4"><span className="text-primary font-bold text-xs">{vipLabel(staff.vip_level)}</span></td>
                 <td className="px-6 py-4 font-bold">{staff.stats?.total_valid ?? 0}</td>
                 <td className="px-6 py-4 font-bold text-secondary">{(staff.stats?.total_commission ?? 0).toFixed(2)}</td>
                 <td className="px-6 py-4">{statusBadge(staff.status)}</td>
+                <td className="px-6 py-4 text-on-surface-variant">{formatDateShort(staff.last_login_at)}</td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2">
                     <button onClick={() => onEdit(staff)} className="text-primary hover:bg-primary/10 p-1.5 rounded-lg transition-colors" title="编辑">
