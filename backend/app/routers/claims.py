@@ -1,10 +1,13 @@
 import math
+from datetime import datetime, timezone
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo import ReturnDocument
 from app.database import get_db
 from app.dependencies import get_current_admin
 from app.schemas.common import PageResponse
+from app.services.withdrawals import log_finance_action
 from app.utils.helpers import to_str_id
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
@@ -12,6 +15,9 @@ router = APIRouter(dependencies=[Depends(get_current_admin)])
 
 def serialize_claim(doc: dict) -> dict:
     data = to_str_id(doc)
+    data["settlement_status"] = data.get("settlement_status") or "unpaid"
+    data["commission_amount"] = float(data.get("commission_amount", 0) or 0)
+    data["settled_at"] = data.get("settled_at")
     for k in ("campaign_id", "staff_id", "wheel_item_id", "reward_code_id"):
         if isinstance(data.get(k), ObjectId):
             data[k] = str(data[k])
@@ -24,13 +30,36 @@ def parse_object_id(value: str, field_name: str) -> ObjectId:
     return ObjectId(value)
 
 
+def normalized_settlement_status(claim: dict) -> str:
+    return claim.get("settlement_status") or "unpaid"
+
+
+def settlement_filter(status: str) -> dict:
+    if status == "unpaid":
+        return {"$or": [{"settlement_status": "unpaid"}, {"settlement_status": {"$exists": False}}]}
+    return {"settlement_status": status}
+
+
+def settlement_response(doc: dict) -> dict:
+    claim = serialize_claim(doc)
+    return {
+        "id": claim["id"],
+        "settlement_status": claim["settlement_status"],
+        "commission_amount": claim["commission_amount"],
+        "settled_at": claim.get("settled_at"),
+        "cancelled_at": claim.get("cancelled_at"),
+        "cancel_reason": claim.get("cancel_reason"),
+        "frozen_at": claim.get("frozen_at"),
+    }
+
+
 @router.get("/", response_model=PageResponse)
 async def list_claims(
     page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
     campaign_id: str | None = None, staff_id: str | None = None,
     phone: str | None = None, status: str | None = None,
     ip: str | None = None, device_fingerprint: str | None = None,
-    prize_type: str | None = None,
+    prize_type: str | None = None, settlement_status: str | None = Query(None),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     query: dict = {}
@@ -48,6 +77,8 @@ async def list_claims(
         query["device_fingerprint"] = {"$regex": device_fingerprint, "$options": "i"}
     if prize_type:
         query["prize_type"] = prize_type
+    if settlement_status:
+        query.update(settlement_filter(settlement_status))
     cursor = db.claims.find(query).sort("created_at", -1).skip((page - 1) * page_size).limit(page_size)
     items = await cursor.to_list(length=page_size)
     total = await db.claims.count_documents(query)
@@ -56,6 +87,109 @@ async def list_claims(
         page=page, page_size=page_size,
         pages=math.ceil(total / page_size) if total else 0,
     )
+
+
+@router.post("/{claim_id}/cancel")
+async def cancel_claim(
+    claim_id: str,
+    payload: dict,
+    admin: dict = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    oid = parse_object_id(claim_id, "claim_id")
+    claim = await db.claims.find_one({"_id": oid})
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    reason = str(payload.get("reason", "")).strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="Cancel reason is required")
+    updated = await db.claims.find_one_and_update(
+        {"_id": oid},
+        {"$set": {"settlement_status": "cancelled", "cancelled_at": datetime.now(timezone.utc), "cancel_reason": reason}},
+        return_document=ReturnDocument.AFTER,
+    )
+    await db.commission_logs.update_many(
+        {"claim_id": oid},
+        {"$set": {"status": "cancelled", "cancelled_at": datetime.now(timezone.utc), "cancel_reason": reason}},
+    )
+    await log_finance_action(
+        db,
+        admin=admin,
+        action="cancel",
+        target_type="claim",
+        target_id=oid,
+        old_status=normalized_settlement_status(claim),
+        new_status="cancelled",
+        amount=float(updated.get("commission_amount", 0) or 0),
+        remark=reason,
+    )
+    return settlement_response(updated)
+
+
+@router.post("/{claim_id}/freeze")
+async def freeze_claim(
+    claim_id: str,
+    admin: dict = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    oid = parse_object_id(claim_id, "claim_id")
+    claim = await db.claims.find_one({"_id": oid})
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if normalized_settlement_status(claim) != "unpaid":
+        raise HTTPException(status_code=400, detail="invalid_transition")
+    updated = await db.claims.find_one_and_update(
+        {"_id": oid, **settlement_filter("unpaid")},
+        {"$set": {"settlement_status": "frozen", "frozen_at": datetime.now(timezone.utc)}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if not updated:
+        raise HTTPException(status_code=409, detail="Claim status changed, please retry")
+    await log_finance_action(
+        db,
+        admin=admin,
+        action="freeze",
+        target_type="claim",
+        target_id=oid,
+        old_status="unpaid",
+        new_status="frozen",
+        amount=float(updated.get("commission_amount", 0) or 0),
+        remark="",
+    )
+    return settlement_response(updated)
+
+
+@router.post("/{claim_id}/unfreeze")
+async def unfreeze_claim(
+    claim_id: str,
+    admin: dict = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    oid = parse_object_id(claim_id, "claim_id")
+    claim = await db.claims.find_one({"_id": oid})
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if normalized_settlement_status(claim) != "frozen":
+        raise HTTPException(status_code=400, detail="invalid_transition")
+    updated = await db.claims.find_one_and_update(
+        {"_id": oid, "settlement_status": "frozen"},
+        {"$set": {"settlement_status": "unpaid", "frozen_at": None}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if not updated:
+        raise HTTPException(status_code=409, detail="Claim status changed, please retry")
+    await log_finance_action(
+        db,
+        admin=admin,
+        action="unfreeze",
+        target_type="claim",
+        target_id=oid,
+        old_status="frozen",
+        new_status="unpaid",
+        amount=float(updated.get("commission_amount", 0) or 0),
+        remark="",
+    )
+    return settlement_response(updated)
 
 
 @router.get("/{claim_id}")

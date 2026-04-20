@@ -107,3 +107,11 @@ async def calculate_commissions(db, staff_doc, claim_id, campaign_id):
                 vip_level=int(ancestor.get("vip_level", 0)),
                 campaign_id=campaign_id,
             )
+
+    total = 0.0
+    async for log in db.commission_logs.find({"claim_id": claim_id}):
+        total += float(log.get("amount", 0.0))
+    await db.claims.update_one(
+        {"_id": claim_id},
+        {"$set": {"commission_amount": total}},
+    )

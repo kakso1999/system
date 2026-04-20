@@ -562,6 +562,9 @@ async def complete(
         "ip": ip, "device_fingerprint": device_fp, "wheel_item_id": wid,
         "prize_type": item["type"], "verified": True,
         "reward_code_id": reward_code_id, "reward_code": reward_code,
+        "settlement_status": "pending_redeem" if item["type"] == "website" else "unpaid",
+        "commission_amount": 0.0,
+        "settled_at": None,
         "redirected": False, "status": "success", "risk_hit": [],
         "created_at": datetime.now(timezone.utc),
     }

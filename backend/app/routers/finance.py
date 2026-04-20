@@ -23,6 +23,29 @@ def parse_object_id(value: str, message: str) -> ObjectId:
         raise HTTPException(status_code=400, detail=message) from exc
 
 
+def unpaid_settlement_filter() -> dict:
+    return {"$or": [{"settlement_status": "unpaid"}, {"settlement_status": {"$exists": False}}]}
+
+
+async def sum_claim_commission(db: AsyncIOMotorDatabase, query: dict) -> float:
+    total = 0.0
+    async for claim in db.claims.find(query):
+        total += await claim_commission_amount(db, claim)
+    return total
+
+
+async def claim_commission_amount(db: AsyncIOMotorDatabase, claim: dict) -> float:
+    commission_amount = claim.get("commission_amount")
+    if commission_amount is not None:
+        return float(commission_amount or 0)
+    pipeline = [
+        {"$match": {"claim_id": claim["_id"]}},
+        {"$group": {"_id": None, "t": {"$sum": "$amount"}}},
+    ]
+    result = await db.commission_logs.aggregate(pipeline).to_list(length=1)
+    return float(result[0]["t"]) if result else 0.0
+
+
 @router.get("/overview")
 async def overview(db: AsyncIOMotorDatabase = Depends(get_db)):
     async def sum_by_status(st):
@@ -35,6 +58,8 @@ async def overview(db: AsyncIOMotorDatabase = Depends(get_db)):
         "total_pending": await sum_by_status("pending"),
         "total_approved": await sum_by_status("approved"),
         "total_frozen": await sum_by_status("frozen"),
+        "settlement_pending": await sum_claim_commission(db, unpaid_settlement_filter()),
+        "settlement_paid": await sum_claim_commission(db, {"settlement_status": "paid"}),
         "staff_count": await db.staff_users.count_documents({"status": "active"}),
     }
 
@@ -57,6 +82,14 @@ async def staff_performance(
         item = to_str_id(dict(s))
         item["paid_amount"] = paid_r[0]["t"] if paid_r else 0
         item["pending_amount"] = pending_r[0]["t"] if pending_r else 0
+        item["settlement_pending"] = await sum_claim_commission(
+            db,
+            {"staff_id": sid, **unpaid_settlement_filter()},
+        )
+        item["settlement_paid"] = await sum_claim_commission(
+            db,
+            {"staff_id": sid, "settlement_status": "paid"},
+        )
         for k in ("parent_id", "campaign_id"):
             if isinstance(item.get(k), ObjectId):
                 item[k] = str(item[k])
@@ -83,52 +116,50 @@ async def manual_settle(
     if not staff:
         raise HTTPException(status_code=404, detail="Staff not found")
 
-    approved_logs = await db.commission_logs.find(
-        {"beneficiary_staff_id": staff_id, "status": "approved"}
+    claims = await db.claims.find(
+        {"staff_id": staff_id, **unpaid_settlement_filter()}
     ).sort("created_at", 1).to_list(length=100000)
-    total_approved = sum(float(log.get("amount", 0)) for log in approved_logs)
-    if amount > total_approved:
-        raise HTTPException(status_code=400, detail=f"Settlement amount {amount} exceeds approved balance {total_approved}")
 
-    remaining = amount
-    settle_ids: list[ObjectId] = []
+    settle_claim_ids: list[ObjectId] = []
     settled_amount = 0.0
-    for log in approved_logs:
-        if remaining <= 0:
-            break
-        log_amount = float(log.get("amount", 0))
-        if log_amount <= 0:
+    for claim in claims:
+        claim_amount = await claim_commission_amount(db, claim)
+        if claim_amount <= 0:
             continue
-        if log_amount > remaining:
-            break
-        settle_ids.append(log["_id"])
-        settled_amount += log_amount
-        remaining -= log_amount
-    if remaining > 1e-9:
+        settle_claim_ids.append(claim["_id"])
+        settled_amount += claim_amount
+
+    if amount > settled_amount + 1e-9:
+        raise HTTPException(status_code=400, detail=f"Settlement amount {amount} exceeds approved balance {settled_amount}")
+    if abs(amount - settled_amount) > 1e-9:
         raise HTTPException(status_code=400, detail="Settlement amount must match full approved commission records")
-    if not settle_ids:
+    if not settle_claim_ids:
         raise HTTPException(status_code=400, detail="No approved commission records to settle")
 
     now = datetime.now(timezone.utc)
-    update_result = await db.commission_logs.update_many(
-        {"_id": {"$in": settle_ids}, "status": "approved"},
+    claim_update_result = await db.claims.update_many(
+        {"_id": {"$in": settle_claim_ids}, **unpaid_settlement_filter()},
+        {"$set": {"settlement_status": "paid", "settled_at": now}},
+    )
+    if claim_update_result.modified_count != len(settle_claim_ids):
+        raise HTTPException(status_code=409, detail="Settlement conflict, please retry")
+    await db.commission_logs.update_many(
+        {"claim_id": {"$in": settle_claim_ids}, "status": "approved"},
         {"$set": {"status": "paid", "paid_at": now, "settled_by": admin.get("username", "admin")}},
     )
-    if update_result.modified_count != len(settle_ids):
-        raise HTTPException(status_code=409, detail="Settlement conflict, please retry")
 
-    await db.finance_action_logs.insert_one({
-        "operator": admin.get("username", "admin"),
-        "action": "settle",
-        "target_type": "commission",
-        "target_id": staff_id,
-        "old_status": "approved",
-        "new_status": "paid",
-        "amount_change": round(settled_amount, 2),
-        "remark": remark,
-        "created_at": now,
-    })
-    return MessageResponse(message=f"Settled {len(settle_ids)} commission records")
+    await log_finance_action(
+        db,
+        admin=admin,
+        action="settle",
+        target_type="claim",
+        target_id=staff_id,
+        old_status="unpaid",
+        new_status="paid",
+        amount=round(settled_amount, 2),
+        remark=remark,
+    )
+    return MessageResponse(message=f"Settled {len(settle_claim_ids)} claim records")
 
 
 @router.get("/settlement-records", response_model=PageResponse)

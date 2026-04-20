@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo import ReturnDocument
 
 from app.database import get_db
 from app.dependencies import get_api_key
@@ -44,6 +45,7 @@ async def redeem_reward_code(
     rc = await db.reward_codes.find_one_and_update(
         {"code": normalized, "status": "assigned"},
         {"$set": {"status": "redeemed", "redeemed_at": now, "updated_at": now}},
+        return_document=ReturnDocument.AFTER,
     )
     if not rc:
         existing = await db.reward_codes.find_one({"code": normalized})
@@ -55,4 +57,8 @@ async def redeem_reward_code(
             "success": False,
             "message": f"Reward code status is '{existing.get('status')}', cannot redeem",
         }
+    await db.claims.update_one(
+        {"reward_code_id": rc["_id"], "settlement_status": "pending_redeem"},
+        {"$set": {"settlement_status": "unpaid"}},
+    )
     return {"success": True, "message": "Reward code redeemed successfully"}
