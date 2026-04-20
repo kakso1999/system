@@ -63,6 +63,8 @@ export interface WheelItem {
   image_url?: string;
 }
 
+export type SettlementStatus = "pending_redeem" | "unpaid" | "paid" | "cancelled" | "frozen";
+
 export interface Claim {
   id: string;
   campaign_id: string;
@@ -75,6 +77,12 @@ export interface Claim {
   reward_code: string | null;
   redirected: boolean;
   status: "success" | "failed" | "blocked";
+  settlement_status?: SettlementStatus;
+  commission_amount?: number;
+  settled_at?: string | null;
+  cancelled_at?: string | null;
+  frozen_at?: string | null;
+  cancel_reason?: string;
   risk_hit: string[];
   created_at: string;
 }

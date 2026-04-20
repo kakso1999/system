@@ -5,23 +5,41 @@ import api from "@/lib/api";
 import type { PageResponse } from "@/types";
 import CommissionRecordsSection from "./commission-records-section";
 import type { AdminCommissionRecord, FinanceOverview, StaffPerformance, TabKey } from "./finance-types";
+import { toPoints } from "./finance-types";
 import ManualSettleModal from "./manual-settle-modal";
 import OverviewCards from "./overview-cards";
 import RejectModal from "./reject-modal";
 import StaffPerformanceSection from "./staff-performance-section";
 import WithdrawalManagementTab from "./withdrawal-management-tab";
 
-const emptyOverview: FinanceOverview = {
+type FinanceOverviewWithSettlement = FinanceOverview & {
+  settlement_pending: number;
+  settlement_paid: number;
+};
+
+const emptyOverview: FinanceOverviewWithSettlement = {
   total_commission: 0,
   pending: 0,
   approved: 0,
   paid: 0,
   frozen: 0,
+  settlement_pending: 0,
+  settlement_paid: 0,
 };
+
+const settlementCards = [
+  { label: "待结算（按订单）", subtext: "基于订单状态", key: "settlement_pending", tone: "text-blue-700" },
+  { label: "已结算（按订单）", subtext: "基于订单状态", key: "settlement_paid", tone: "text-green-700" },
+] satisfies {
+  label: string;
+  subtext: string;
+  key: keyof Pick<FinanceOverviewWithSettlement, "settlement_pending" | "settlement_paid">;
+  tone: string;
+}[];
 
 export default function FinancePage() {
   const [activeTab, setActiveTab] = useState<TabKey>("staff");
-  const [overview, setOverview] = useState<FinanceOverview>(emptyOverview);
+  const [overview, setOverview] = useState<FinanceOverviewWithSettlement>(emptyOverview);
   const [staffList, setStaffList] = useState<StaffPerformance[]>([]);
   const [staffPage, setStaffPage] = useState(1);
   const [staffTotal, setStaffTotal] = useState(0);
@@ -48,6 +66,8 @@ export default function FinancePage() {
         total_approved?: number;
         total_paid?: number;
         total_frozen?: number;
+        settlement_pending?: number;
+        settlement_paid?: number;
       };
       setOverview({
         total_commission: Number(data.total_commission || 0),
@@ -55,6 +75,8 @@ export default function FinancePage() {
         approved: Number(data.approved ?? data.total_approved ?? 0),
         paid: Number(data.paid ?? data.total_paid ?? 0),
         frozen: Number(data.frozen ?? data.total_frozen ?? 0),
+        settlement_pending: Number(data.settlement_pending ?? 0),
+        settlement_paid: Number(data.settlement_paid ?? 0),
       });
     } catch {
       setOverview(emptyOverview);
@@ -159,6 +181,18 @@ export default function FinancePage() {
       </div>
 
       <OverviewCards overview={overview} />
+
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {settlementCards.map((item) => (
+          <article key={item.key} className="bg-surface-container-lowest rounded-xl shadow-sm p-6">
+            <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">{item.label}</p>
+            <p className={`text-2xl font-extrabold font-[var(--font-headline)] mt-2 ${item.tone}`}>
+              {toPoints(overview[item.key] ?? 0)}
+            </p>
+            <p className="mt-1 text-xs text-on-surface-variant">{item.subtext}</p>
+          </article>
+        ))}
+      </section>
 
       <section className="bg-surface-container-lowest rounded-xl p-2 shadow-sm inline-flex gap-2">
         <button
