@@ -132,6 +132,11 @@ async def login(
         )
     if staff.get("status") != "active":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is not active")
+    now = datetime.now(timezone.utc)
+    await db.staff_users.update_one(
+        {"_id": staff["_id"]},
+        {"$set": {"last_login_at": now, "updated_at": now}},
+    )
     token = create_access_token({"sub": str(staff["_id"]), "role": "staff"})
     refresh = create_refresh_token({"sub": str(staff["_id"]), "role": "staff"})
     return TokenResponse(access_token=token, refresh_token=refresh, role="staff")
