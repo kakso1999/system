@@ -17,6 +17,7 @@ async def lifespan(app: FastAPI):
     await connect_db()
     await seed_admin()
     await seed_settings()
+    await seed_bonus_default_rule()
     yield
     await close_db()
 
@@ -108,6 +109,27 @@ async def seed_settings():
         )
 
 
+async def seed_bonus_default_rule():
+    db = get_db()
+    if await db.staff_bonus_rules.find_one({"staff_id": None}):
+        return
+    now = datetime.now(timezone.utc)
+    await db.staff_bonus_rules.insert_one(
+        {
+            "staff_id": None,
+            "tiers": [
+                {"threshold": 5, "amount": 50.0},
+                {"threshold": 10, "amount": 100.0},
+                {"threshold": 20, "amount": 300.0},
+            ],
+            "enabled": True,
+            "created_at": now,
+            "updated_at": now,
+            "created_by_admin_id": None,
+        }
+    )
+
+
 app = FastAPI(title="GroundRewards API", version="1.0.0", lifespan=lifespan)
 
 settings = get_settings()
@@ -122,7 +144,7 @@ app.add_middleware(
 # Import and register routers
 from app.routers import admin_auth, staff_auth, campaigns, wheel, reward_codes, admins
 from app.routers import staff, claims, user_flow, risk_control, settings as settings_router
-from app.routers import promoter, finance, dashboard, external
+from app.routers import promoter, finance, dashboard, external, bonus
 
 app.include_router(admin_auth.router, prefix="/api/auth/admin", tags=["Admin Auth"])
 app.include_router(staff_auth.router, prefix="/api/auth/staff", tags=["Staff Auth"])
@@ -136,6 +158,7 @@ app.include_router(risk_control.router, prefix="/api/admin/risk-control", tags=[
 app.include_router(settings_router.router, prefix="/api/admin/settings", tags=["System Settings"])
 app.include_router(finance.router, prefix="/api/admin/finance", tags=["Finance"])
 app.include_router(dashboard.router, prefix="/api/admin/dashboard", tags=["Dashboard"])
+app.include_router(bonus.router, prefix="/api/admin/bonus", tags=["Bonus"])
 app.include_router(user_flow.router, prefix="/api/claim", tags=["User Claim Flow"])
 app.include_router(promoter.router, prefix="/api/promoter", tags=["Promoter"])
 app.include_router(external.router, prefix="/api/external", tags=["External"])
