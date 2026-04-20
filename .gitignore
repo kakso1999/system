@@ -16,3 +16,4 @@ backend/uploads/*
 # Node
 node_modules/
 .next/
+codex_progress.log
