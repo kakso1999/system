@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, ChevronRight, Gift, Star, Sparkles } from "lucide-react";
 import confetti from "canvas-confetti";
 import api, { resolveApiUrl } from "@/lib/api";
@@ -32,7 +32,9 @@ type Step = "welcome" | "prizes" | "wheel";
 export default function WelcomePage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const code = params.code as string;
+  const sessionToken = searchParams.get("session_token");
   const [data, setData] = useState<WelcomeData | null>(null);
   const [error, setError] = useState("");
   const [step, setStep] = useState<Step>("welcome");
@@ -56,7 +58,8 @@ export default function WelcomePage() {
 
   const loadWelcome = async () => {
     try {
-      const res = await api.get(`/api/claim/welcome/${code}`);
+      const url = sessionToken ? `/api/claim/welcome/${code}?session_token=${encodeURIComponent(sessionToken)}` : `/api/claim/welcome/${code}`;
+      const res = await api.get(url);
       setData(res.data);
     } catch {
       setError("Activity not found or has ended");
@@ -212,7 +215,7 @@ export default function WelcomePage() {
           </div>
 
           <button
-            onClick={() => router.push(`/wheel/${code}`)}
+            onClick={() => router.push(sessionToken ? `/wheel/${code}?session_token=${encodeURIComponent(sessionToken)}` : `/wheel/${code}`)}
             className="w-full max-w-sm bg-gradient-to-r from-primary to-primary-dim text-white rounded-full px-10 py-5 shadow-2xl shadow-primary/40 font-[var(--font-headline)] font-bold text-lg active:scale-95 transition-all flex items-center justify-center gap-2"
           >
             SPIN THE WHEEL <ChevronRight className="w-5 h-5" />
