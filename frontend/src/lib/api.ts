@@ -98,7 +98,7 @@ function getRoleFromHeader(authorization?: string): AuthRole | undefined {
 }
 
 function inferRoleFromPath(pathname: string): AuthRole | undefined {
-  const adminPaths = ["/dashboard", "/staff", "/campaigns", "/claims", "/finance", "/risk-control", "/settings"];
+  const adminPaths = ["/dashboard", "/staff", "/admins", "/campaigns", "/claims", "/finance", "/risk-control", "/settings"];
   if (adminPaths.some((path) => pathname.startsWith(path))) {
     return "admin";
   }
