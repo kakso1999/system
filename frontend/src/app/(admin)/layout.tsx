@@ -3,7 +3,7 @@
 import { useRouter, usePathname } from "next/navigation";
 import { clearAuth, getAdminToken } from "@/lib/auth";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Users, Users2, Megaphone, Receipt, Wallet, Shield, Settings, ChevronLeft, ChevronRight, LogOut, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Users, Users2, Megaphone, Receipt, Wallet, Shield, Settings, ChevronLeft, ChevronRight, LogOut, ShieldCheck, Zap } from "lucide-react";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
@@ -11,10 +11,20 @@ const navItems = [
   { label: "管理员管理", icon: Users2, href: "/admins" },
   { label: "活动管理", icon: Megaphone, href: "/campaigns" },
   { label: "领取记录", icon: Receipt, href: "/claims" },
+  { label: "冲单奖励", icon: Zap, href: "/bonus" },
   { label: "财务结算", icon: Wallet, href: "/finance" },
   { label: "风控设置", icon: Shield, href: "/risk-control" },
   { label: "系统设置", icon: Settings, href: "/settings" },
 ];
+
+function markBonusRoleIntent(href: string) {
+  if (href !== "/bonus") return;
+  try {
+    window.sessionStorage.setItem("bonus_role", "admin");
+  } catch {
+    return;
+  }
+}
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -63,6 +73,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             const Icon = item.icon;
             return (
               <a key={item.href} href={item.href}
+                onClick={() => markBonusRoleIntent(item.href)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
                   isActive
                     ? "bg-primary text-on-primary shadow-md shadow-primary/20"
