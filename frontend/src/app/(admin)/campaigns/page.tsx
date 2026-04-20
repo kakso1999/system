@@ -15,6 +15,52 @@ interface StaffPrizeStat {
   claimed_count: number;
 }
 
+interface CampaignFormState {
+  name: string;
+  description: string;
+  start_time: string;
+  end_time: string;
+  rules_text: string;
+  max_claims_per_user: number;
+  no_prize_weight: number;
+}
+
+type CampaignWithNoPrizeWeight = Campaign & { no_prize_weight?: number };
+
+const DEFAULT_NO_PRIZE_WEIGHT = 10;
+const WHEEL_SEGMENT_COLORS = ["#0253cd", "#ffc69a", "#0048b5", "#8c4a00", "#789dff", "#ffb375"];
+
+function getCampaignNoPrizeWeight(campaign: Campaign | null | undefined): number {
+  const weight = (campaign as CampaignWithNoPrizeWeight | null | undefined)?.no_prize_weight;
+  return typeof weight === "number" && weight >= 0 ? weight : DEFAULT_NO_PRIZE_WEIGHT;
+}
+
+function createCampaignForm(campaign?: Campaign | null): CampaignFormState {
+  return {
+    name: campaign?.name || "",
+    description: campaign?.description || "",
+    start_time: campaign?.start_time?.slice(0, 16) || "",
+    end_time: campaign?.end_time?.slice(0, 16) || "",
+    rules_text: campaign?.rules_text || "",
+    max_claims_per_user: campaign?.max_claims_per_user || 1,
+    no_prize_weight: getCampaignNoPrizeWeight(campaign),
+  };
+}
+
+function parseNonNegativeInt(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? 0 : Math.max(0, parsed);
+}
+
+function calculatePercentage(weight: number, totalWeight: number): number {
+  return totalWeight > 0 ? (weight / totalWeight) * 100 : 0;
+}
+
+function formatPercentage(value: number): string {
+  const rounded = Number(value.toFixed(1));
+  return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(1);
+}
+
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [total, setTotal] = useState(0);
@@ -23,7 +69,7 @@ export default function CampaignsPage() {
   const [modal, setModal] = useState<ModalMode>(null);
   const [selected, setSelected] = useState<Campaign | null>(null);
 
-  const [form, setForm] = useState({ name: "", description: "", start_time: "", end_time: "", rules_text: "", max_claims_per_user: 1 });
+  const [form, setForm] = useState<CampaignFormState>(createCampaignForm());
 
   const [wheelItems, setWheelItems] = useState<WheelItem[]>([]);
   const [wheelForm, setWheelForm] = useState({
@@ -57,21 +103,45 @@ export default function CampaignsPage() {
 
   useEffect(() => { loadCampaigns(); }, [loadCampaigns]);
 
+  const loadCampaignDetail = async (campaignId: string) => {
+    try {
+      const res = await api.get<Campaign>(`/api/admin/campaigns/${campaignId}`);
+      return res.data;
+    } catch {
+      return null;
+    }
+  };
+
+  const loadWheelItemsForCampaign = async (campaignId: string) => {
+    try {
+      const res = await api.get<WheelItem[]>("/api/admin/wheel-items/", { params: { campaign_id: campaignId } });
+      return res.data;
+    } catch {
+      return [];
+    }
+  };
+
   const openCreate = () => {
     setSelected(null);
-    setForm({ name: "", description: "", start_time: "", end_time: "", rules_text: "", max_claims_per_user: 1 });
+    setWheelItems([]);
+    setForm(createCampaignForm());
     setModal("create");
   };
 
-  const openEdit = (c: Campaign) => {
+  const openEdit = async (c: Campaign) => {
     setSelected(c);
-    setForm({
-      name: c.name, description: c.description,
-      start_time: c.start_time?.slice(0, 16) || "", end_time: c.end_time?.slice(0, 16) || "",
-      rules_text: c.rules_text || "",
-      max_claims_per_user: c.max_claims_per_user || 1,
-    });
+    setWheelItems([]);
+    setForm(createCampaignForm(c));
     setModal("edit");
+    const [campaignDetail, campaignWheelItems] = await Promise.all([
+      loadCampaignDetail(c.id),
+      loadWheelItemsForCampaign(c.id),
+    ]);
+    setWheelItems(campaignWheelItems);
+    if (campaignDetail) {
+      setSelected(campaignDetail);
+      setForm(createCampaignForm(campaignDetail));
+    }
   };
 
   const openWheel = async (c: Campaign) => {
@@ -79,10 +149,14 @@ export default function CampaignsPage() {
     setModal("wheel");
     setEditingWheel(null);
     resetWheelForm();
-    try {
-      const res = await api.get<WheelItem[]>("/api/admin/wheel-items/", { params: { campaign_id: c.id } });
-      setWheelItems(res.data);
-    } catch { setWheelItems([]); }
+    const [campaignDetail, campaignWheelItems] = await Promise.all([
+      loadCampaignDetail(c.id),
+      loadWheelItemsForCampaign(c.id),
+    ]);
+    setWheelItems(campaignWheelItems);
+    if (campaignDetail) {
+      setSelected(campaignDetail);
+    }
   };
 
   const openStaff = async (c: Campaign) => {
@@ -106,7 +180,12 @@ export default function CampaignsPage() {
   const handleSaveCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const payload = { ...form, start_time: new Date(form.start_time).toISOString(), end_time: new Date(form.end_time).toISOString() };
+      const payload = {
+        ...form,
+        no_prize_weight: Math.max(0, form.no_prize_weight),
+        start_time: new Date(form.start_time).toISOString(),
+        end_time: new Date(form.end_time).toISOString(),
+      };
       if (modal === "create") {
         await api.post("/api/admin/campaigns/", payload);
       } else if (selected) {
@@ -261,9 +340,37 @@ export default function CampaignsPage() {
     } catch { alert("绑定失败"); }
   };
 
-  // Probability calc: each item's weight is treated as percentage, remainder = no prize
-  const totalPct = wheelItems.filter(w => w.enabled).reduce((s, w) => s + w.weight, 0);
-  const noPrizePct = Math.max(0, 100 - totalPct);
+  const enabledWheelItems = wheelItems.filter(w => w.enabled);
+  const enabledWheelWeight = enabledWheelItems.reduce((sum, w) => sum + w.weight, 0);
+  const selectedNoPrizeWeight = getCampaignNoPrizeWeight(selected);
+  const totalWeight = enabledWheelWeight + selectedNoPrizeWeight;
+  const noPrizePercentage = calculatePercentage(selectedNoPrizeWeight, totalWeight);
+  const campaignTotalWeight = enabledWheelWeight + form.no_prize_weight;
+  const campaignNoPrizePercentage = calculatePercentage(form.no_prize_weight, campaignTotalWeight);
+  const wheelFormItemsWeight = wheelItems.reduce((sum, w) => {
+    if (editingWheel?.id === w.id) {
+      return sum + (wheelForm.enabled ? wheelForm.weight : 0);
+    }
+    return sum + (w.enabled ? w.weight : 0);
+  }, 0);
+  const wheelFormTotalWeight = (editingWheel ? wheelFormItemsWeight : wheelFormItemsWeight + (wheelForm.enabled ? wheelForm.weight : 0)) + selectedNoPrizeWeight;
+  const wheelFormPercentage = wheelForm.enabled ? calculatePercentage(wheelForm.weight, wheelFormTotalWeight) : 0;
+  const summarySegments = [
+    ...enabledWheelItems.map((w, index) => ({
+      id: w.id,
+      label: w.display_name,
+      weight: w.weight,
+      percentage: calculatePercentage(w.weight, totalWeight),
+      color: WHEEL_SEGMENT_COLORS[index % WHEEL_SEGMENT_COLORS.length],
+    })),
+    {
+      id: "no-prize",
+      label: "未中奖",
+      weight: selectedNoPrizeWeight,
+      percentage: noPrizePercentage,
+      color: "#d1d5db",
+    },
+  ];
 
   const statusBadge = (s: string) => {
     const m: Record<string, [string, string]> = {
@@ -350,6 +457,20 @@ export default function CampaignsPage() {
                 <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})}
                   className="w-full bg-surface-container-low border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/40 h-20" />
               </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-bold text-on-surface-variant">未中奖权重</label>
+                  <span className="text-xs text-on-surface-variant">实际概率: {formatPercentage(campaignNoPrizePercentage)}%</span>
+                </div>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.no_prize_weight}
+                  onChange={e => setForm({ ...form, no_prize_weight: parseNonNegativeInt(e.target.value) })}
+                  className="w-full bg-surface-container-low border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/40"
+                />
+                <p className="text-xs text-on-surface-variant mt-1">按当前已启用奖项权重计算未中奖的实际概率</p>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-bold text-on-surface-variant block mb-1">开始时间</label>
@@ -380,7 +501,7 @@ export default function CampaignsPage() {
         </div>
       )}
 
-      {/* Wheel Items Modal — percentage based */}
+      {/* Wheel Items Modal — weight based */}
       {modal === "wheel" && selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-inverse-surface/40 backdrop-blur-sm overflow-auto py-8">
           <div className="bg-surface-container-lowest rounded-2xl p-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-auto">
@@ -391,44 +512,32 @@ export default function CampaignsPage() {
               <button onClick={() => setModal(null)} className="text-outline hover:text-on-surface text-2xl">&times;</button>
             </div>
 
-            {/* Probability summary */}
+            {/* Weight summary */}
             <div className="mb-4 p-4 bg-surface-container-low rounded-xl">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-bold text-on-surface-variant">概率分配</span>
-                <span className={`text-sm font-bold ${totalPct > 100 ? "text-error" : "text-on-surface"}`}>
-                  已分配 {totalPct}% / 100%
+                <span className="text-sm font-bold text-on-surface-variant">转盘权重分布</span>
+                <span className="text-sm font-bold text-on-surface">
+                  总权重: {totalWeight}
                 </span>
               </div>
               <div className="h-3 w-full bg-surface-variant rounded-full overflow-hidden flex">
-                {wheelItems.filter(w => w.enabled).map((w, i) => (
-                  <div key={w.id} className="h-full" style={{
-                    width: `${w.weight}%`,
-                    backgroundColor: ["#0253cd", "#ffc69a", "#0048b5", "#8c4a00", "#789dff", "#ffb375"][i % 6],
+                {summarySegments.filter(segment => segment.weight > 0).map(segment => (
+                  <div key={segment.id} className="h-full" style={{
+                    width: `${segment.percentage}%`,
+                    backgroundColor: segment.color,
                   }} />
                 ))}
-                {noPrizePct > 0 && (
-                  <div className="h-full bg-gray-300" style={{ width: `${noPrizePct}%` }} />
-                )}
               </div>
               <div className="flex items-center gap-4 mt-2 text-xs text-on-surface-variant flex-wrap">
-                {wheelItems.filter(w => w.enabled).map((w, i) => (
-                  <span key={w.id} className="flex items-center gap-1">
+                {summarySegments.map(segment => (
+                  <span key={segment.id} className="flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full" style={{
-                      backgroundColor: ["#0253cd", "#ffc69a", "#0048b5", "#8c4a00", "#789dff", "#ffb375"][i % 6],
+                      backgroundColor: segment.color,
                     }} />
-                    {w.display_name} {w.weight}%
+                    {segment.label} 权重{segment.weight} ({formatPercentage(segment.percentage)}%)
                   </span>
                 ))}
-                {noPrizePct > 0 && (
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-gray-300" />
-                    未中奖 {noPrizePct}%
-                  </span>
-                )}
               </div>
-              {totalPct > 100 && (
-                <p className="text-error text-xs font-bold mt-2">总概率超过100%，请调整！</p>
-              )}
             </div>
 
             {/* Existing items */}
@@ -450,7 +559,7 @@ export default function CampaignsPage() {
                           {w.type === "website" ? "跳转奖" : "现场奖"}
                         </span>
                         <span className="font-semibold text-sm">{w.display_name}</span>
-                        <span className="text-xs text-outline font-bold">{w.weight}%</span>
+                        <span className="text-xs text-outline font-bold">权重 {w.weight}</span>
                         <span className={`text-xs font-bold ${w.max_per_staff > 0 ? "text-secondary" : "text-outline"}`}>
                           每员工上限: {w.max_per_staff > 0 ? w.max_per_staff : "不限"}
                         </span>
@@ -506,8 +615,11 @@ export default function CampaignsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-outline block mb-1">中奖概率(%)</label>
-                    <input type="number" min={1} max={100} value={wheelForm.weight} onChange={e => setWheelForm({...wheelForm, weight: parseInt(e.target.value) || 1})}
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-outline">权重</label>
+                      <span className="text-[11px] text-on-surface-variant">实际概率: {formatPercentage(wheelFormPercentage)}%</span>
+                    </div>
+                    <input type="number" min={0} value={wheelForm.weight} onChange={e => setWheelForm({...wheelForm, weight: parseNonNegativeInt(e.target.value)})}
                       className="w-full bg-surface-container-low border-none rounded-xl py-2.5 px-3 text-sm focus:ring-2 focus:ring-primary/40" />
                   </div>
                   <div>
