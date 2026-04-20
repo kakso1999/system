@@ -81,6 +81,14 @@ async def create_indexes():
     await db.staff_payout_accounts.create_index("staff_id")
     await db.withdrawal_requests.create_index([("staff_id", 1), ("status", 1)])
     await db.withdrawal_requests.create_index("created_at")
+    # promo_live_tokens
+    await db.promo_live_tokens.create_index([("staff_id", 1), ("status", 1)])
+    await db.promo_live_tokens.create_index("token_signature", unique=True)
+    await db.promo_live_tokens.create_index("expires_at", expireAfterSeconds=3600)
+    # promo_sessions
+    await db.promo_sessions.create_index("session_token", unique=True)
+    await db.promo_sessions.create_index([("staff_id", 1), ("status", 1)])
+    await db.promo_sessions.create_index("expires_at", expireAfterSeconds=3600)
 
 
 def get_db() -> AsyncIOMotorDatabase:

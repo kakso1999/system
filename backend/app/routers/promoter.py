@@ -1,8 +1,9 @@
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo import ReturnDocument
 from app.database import get_db
 from app.dependencies import get_current_staff
 from app.schemas.common import PageResponse
@@ -14,6 +15,7 @@ from app.services.withdrawals import (
 )
 from app.utils.datetime import get_day_start_utc
 from app.utils.helpers import to_str_id, to_str_ids
+from app.utils.live_token import generate_pin, generate_token_signature
 
 router = APIRouter()
 
@@ -330,3 +332,65 @@ async def team_rewards(
             "awarded_at": awarded["created_at"].isoformat() if awarded else None,
         })
     return {"team_total": team_total, "milestones": milestones, "rewards": to_str_ids(reward_items)}
+
+
+async def _enforce_live_qr_rate_limit(db: AsyncIOMotorDatabase, staff_id: ObjectId, now: datetime) -> None:
+    one_min_ago = now - timedelta(seconds=60)
+    recent = await db.promo_live_tokens.count_documents({
+        "staff_id": staff_id,
+        "created_at": {"$gte": one_min_ago},
+    })
+    if recent >= 10:
+        raise HTTPException(status_code=429, detail="too_many_refresh")
+
+
+async def _increment_qr_version(db: AsyncIOMotorDatabase, staff_id: ObjectId) -> int:
+    updated = await db.staff_users.find_one_and_update(
+        {"_id": staff_id},
+        {"$inc": {"qr_version": 1}},
+        projection={"qr_version": 1},
+        return_document=ReturnDocument.AFTER,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="staff_not_found")
+    return int(updated.get("qr_version", 0))
+
+
+@router.post("/live-qr/generate")
+async def live_qr_generate(
+    current_staff: dict = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    if not current_staff.get("campaign_id"):
+        raise HTTPException(status_code=400, detail="no_active_campaign")
+    now = datetime.now(timezone.utc)
+    await _enforce_live_qr_rate_limit(db, current_staff["_id"], now)
+    await db.promo_live_tokens.update_many(
+        {"staff_id": current_staff["_id"], "status": "active"},
+        {"$set": {"status": "rotated"}},
+    )
+    qr_version = await _increment_qr_version(db, current_staff["_id"])
+    expires_sec = int(await get_setting(db, "live_qr_expires_sec", 300) or 300)
+    expires_at = now + timedelta(seconds=expires_sec)
+    pin = generate_pin()
+    token_signature = generate_token_signature(str(current_staff["_id"]), qr_version)
+    insert = await db.promo_live_tokens.insert_one({
+        "staff_id": current_staff["_id"],
+        "campaign_id": current_staff["campaign_id"],
+        "pin": pin,
+        "token_signature": token_signature,
+        "qr_version": qr_version,
+        "status": "active",
+        "failures": 0,
+        "expires_at": expires_at,
+        "created_at": now,
+        "consumed_at": None,
+        "consumed_device_fingerprint": "",
+    })
+    return {
+        "live_token_id": str(insert.inserted_id),
+        "qr_data": f"/pin/{current_staff['invite_code']}?lt={token_signature}&v={qr_version}",
+        "pin": pin,
+        "expires_at": expires_at.isoformat(),
+        "qr_version": qr_version,
+    }

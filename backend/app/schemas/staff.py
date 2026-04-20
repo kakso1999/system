@@ -81,6 +81,7 @@ class StaffListItem(BaseModel):
     username: str
     status: StaffStatus
     vip_level: int
+    qr_version: int = 0
     stats: StaffStats
     created_at: datetime
 
@@ -89,4 +90,5 @@ class StaffDetail(StaffListItem):
     invite_code: str
     parent_id: str | None = None
     campaign_id: str | None = None
+    qr_version: int = 0
     updated_at: datetime | None = None
