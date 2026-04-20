@@ -4,7 +4,7 @@ import string
 from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
 
@@ -102,6 +102,25 @@ async def check_risk(db, phone, ip, device_fp, campaign_id) -> list[dict]:
     return hits
 
 
+async def _require_active_session(db, session_token: str | None, staff_oid, mismatch_code: str = "session_required"):
+    if not session_token:
+        raise HTTPException(status_code=403, detail={"code": "session_required"})
+    now = datetime.now(timezone.utc)
+    session = await db.promo_sessions.find_one({
+        "session_token": session_token, "status": "active",
+    })
+    if not session:
+        raise HTTPException(status_code=403, detail={"code": "session_required"})
+    exp = session.get("expires_at")
+    if exp and exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    if not exp or exp <= now:
+        raise HTTPException(status_code=403, detail={"code": "session_required"})
+    if session.get("staff_id") != staff_oid:
+        raise HTTPException(status_code=403, detail={"code": mismatch_code})
+    return session
+
+
 def validate_phone(phone: str) -> str:
     """Validate and normalize phone number. Raises HTTPException if invalid."""
     phone = phone.strip()
@@ -155,7 +174,12 @@ async def create_generated_reward_code(db, *, campaign_id, wheel_item_id, staff_
 
 
 @router.get("/welcome/{staff_code}")
-async def welcome(staff_code: str, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+async def welcome(
+    staff_code: str,
+    request: Request,
+    session_token: str | None = None,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
     staff = await db.staff_users.find_one({"invite_code": staff_code.upper()})
     if not staff:
         raise HTTPException(status_code=404, detail="Promoter not found")
@@ -164,6 +188,8 @@ async def welcome(staff_code: str, request: Request, db: AsyncIOMotorDatabase = 
         campaign = await db.campaigns.find_one({"_id": staff["campaign_id"], "status": "active"})
     if not campaign:
         raise HTTPException(status_code=404, detail="No active campaign")
+    if await get_setting(db, "live_qr_enabled"):
+        await _require_active_session(db, session_token, staff["_id"])
 
     await db.staff_users.update_one({"_id": staff["_id"]}, {"$inc": {"stats.total_scans": 1}})
     await db.scan_logs.insert_one({
@@ -196,7 +222,12 @@ async def welcome(staff_code: str, request: Request, db: AsyncIOMotorDatabase = 
 
 
 @router.post("/spin")
-async def spin(payload: dict, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+async def spin(
+    payload: dict,
+    request: Request,
+    session_token_header: str | None = Header(None, alias="X-Session-Token"),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
     staff_code = str(payload.get("staff_code", "")).strip().upper()
     cid_str = payload.get("campaign_id", "")
     if not staff_code:
@@ -209,6 +240,8 @@ async def spin(payload: dict, request: Request, db: AsyncIOMotorDatabase = Depen
         raise HTTPException(status_code=404, detail="Promoter not found")
     if staff.get("campaign_id") != campaign["_id"]:
         raise HTTPException(status_code=400, detail="Campaign does not match promoter")
+    if await get_setting(db, "live_qr_enabled"):
+        await _require_active_session(db, session_token_header, staff["_id"])
     items = await db.wheel_items.find(
         {"campaign_id": cid, "enabled": True}
     ).sort("sort_order", 1).to_list(length=50)
@@ -372,6 +405,7 @@ async def complete(
     payload: dict,
     request: Request,
     background_tasks: BackgroundTasks,
+    session_token_header: str | None = Header(None, alias="X-Session-Token"),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     cid = parse_object_id(payload.get("campaign_id", ""), "campaign_id")
@@ -388,6 +422,11 @@ async def complete(
         raise HTTPException(status_code=404, detail="Promoter not found")
     if staff.get("campaign_id") != cid:
         raise HTTPException(status_code=400, detail="Campaign does not match promoter")
+    session = None
+    if await get_setting(db, "live_qr_enabled"):
+        session = await _require_active_session(db, session_token_header, staff["_id"])
+        if session.get("device_fingerprint", "") != payload.get("device_fingerprint", ""):
+            raise HTTPException(status_code=403, detail={"code": "session_device_mismatch"})
 
     # OTP verification check — always required (real SMS or demo mode)
     five_min_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
@@ -457,6 +496,12 @@ async def complete(
         result = await db.claims.insert_one(claim)
     except DuplicateKeyError:
         return {"success": False, "message": "This phone number has already claimed a prize."}
+
+    if session:
+        await db.promo_sessions.update_one(
+            {"_id": session["_id"]},
+            {"$set": {"status": "consumed", "consumed_at": datetime.now(timezone.utc)}},
+        )
 
     await db.staff_users.update_one(
         {"_id": staff["_id"]},
