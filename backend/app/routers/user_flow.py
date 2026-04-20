@@ -4,8 +4,9 @@ import string
 from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from app.database import get_db
@@ -13,6 +14,7 @@ from app.services.commission import calculate_commissions
 from app.services.team_reward import check_team_rewards
 from app.services.vip import check_vip_upgrade
 from app.utils.live_token import generate_session_token
+from app.utils.security import sign_result_token, verify_result_token
 from app.utils.sms import send_sms
 
 router = APIRouter()
@@ -145,6 +147,10 @@ def no_prize_result() -> dict:
     }
 
 
+def _new_spin_token() -> str:
+    return secrets.token_urlsafe(24)
+
+
 def generate_reward_code() -> str:
     alphabet = string.ascii_uppercase + string.digits
     return "RC" + "".join(secrets.choice(alphabet) for _ in range(8))
@@ -255,34 +261,67 @@ async def spin(
 
     # Use secrets for randomness
     total_weight = sum(all_weights)
-    if total_weight == 0:
-        return no_prize_result()
-    rand_val = secrets.randbelow(total_weight)
-    chosen = 0
-    cumulative = 0
-    for i, w in enumerate(all_weights):
-        cumulative += w
-        if rand_val < cumulative:
-            chosen = i
-            break
+    chosen = -1
+    if total_weight > 0:
+        rand_val = secrets.randbelow(total_weight)
+        chosen = 0
+        cumulative = 0
+        for i, w in enumerate(all_weights):
+            cumulative += w
+            if rand_val < cumulative:
+                chosen = i
+                break
 
-    if chosen >= len(items):
-        return no_prize_result()
+    no_prize = chosen < 0 or chosen >= len(items)
+    item = None
+    wheel_item_id = None
+    if not no_prize:
+        item = items[chosen]
+        max_per_staff = int(item.get("max_per_staff", 0) or 0)
+        if max_per_staff > 0 and staff:
+            claimed_count = await db.claims.count_documents({
+                "staff_id": staff["_id"],
+                "wheel_item_id": item["_id"],
+                "campaign_id": cid,
+                "status": "success",
+            })
+            if claimed_count >= max_per_staff:
+                no_prize = True
+                chosen = -1
+                item = None
+        if not no_prize:
+            wheel_item_id = item["_id"]
 
-    item = items[chosen]
-    max_per_staff = int(item.get("max_per_staff", 0) or 0)
-    if max_per_staff > 0 and staff:
-        claimed_count = await db.claims.count_documents({
-            "staff_id": staff["_id"],
-            "wheel_item_id": item["_id"],
-            "campaign_id": cid,
-            "status": "success",
-        })
-        if claimed_count >= max_per_staff:
-            return no_prize_result()
+    spin_token = _new_spin_token()
+    now = datetime.now(timezone.utc)
+    await db.spin_outcomes.insert_one({
+        "spin_token": spin_token,
+        "staff_id": staff["_id"],
+        "campaign_id": cid,
+        "wheel_item_id": wheel_item_id,
+        "no_prize": no_prize,
+        "status": "pending",
+        "session_token": session_token_header,
+        "created_at": now,
+        "expires_at": now + timedelta(minutes=15),
+        "consumed_at": None,
+    })
+
+    if no_prize:
+        return {
+            "result_index": -1,
+            "spin_token": spin_token,
+            "wheel_item": {
+                "id": "",
+                "display_name": "No Prize",
+                "type": "none",
+                "display_text": "Sorry, better luck next time!",
+            },
+        }
 
     return {
         "result_index": chosen,
+        "spin_token": spin_token,
         "wheel_item": {
             "id": str(item["_id"]), "display_name": item["display_name"],
             "type": item["type"], "display_text": item.get("display_text", ""),
@@ -354,6 +393,10 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
 
 @router.post("/verify-otp")
 async def verify_otp(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
+    campaign_id = payload.get("campaign_id", "")
+    cid = safe_object_id(campaign_id)
+    if cid is None:
+        return {"verified": False, "message": "campaign_id required"}
     phone = payload.get("phone", "").strip()
     otp_code = payload.get("code", "").strip()
     if not phone or not otp_code:
@@ -367,7 +410,7 @@ async def verify_otp(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
 
     # Check if the latest OTP has too many failed attempts
     latest = await db.otp_records.find_one(
-        {"phone": phone, "used": False, "expires_at": {"$gt": now}},
+        {"phone": phone, "campaign_id": cid, "used": False, "expires_at": {"$gt": now}},
         sort=[("created_at", -1)],
     )
     if not latest:
@@ -382,6 +425,7 @@ async def verify_otp(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
     record = await db.otp_records.find_one_and_update(
         {
             "_id": latest["_id"],
+            "campaign_id": cid,
             "code": otp_code,
             "used": False,
             "expires_at": {"$gt": now},
@@ -409,9 +453,11 @@ async def complete(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     cid = parse_object_id(payload.get("campaign_id", ""), "campaign_id")
-    wid = parse_object_id(payload.get("wheel_item_id", ""), "wheel_item_id")
     campaign = await get_active_campaign_or_404(db, cid)
     phone = validate_phone(payload.get("phone", ""))
+    spin_token = str(payload.get("spin_token", "")).strip()
+    if not spin_token:
+        raise HTTPException(status_code=400, detail="spin_token_required")
     ip = request.client.host if request.client else ""
     device_fp = payload.get("device_fingerprint", "")
     staff_code = str(payload.get("staff_code", "")).strip().upper()
@@ -424,9 +470,38 @@ async def complete(
         raise HTTPException(status_code=400, detail="Campaign does not match promoter")
     session = None
     if await get_setting(db, "live_qr_enabled"):
+        if not str(payload.get("device_fingerprint", "")).strip():
+            raise HTTPException(status_code=403, detail={"code": "device_fingerprint_required"})
         session = await _require_active_session(db, session_token_header, staff["_id"])
         if session.get("device_fingerprint", "") != payload.get("device_fingerprint", ""):
             raise HTTPException(status_code=403, detail={"code": "session_device_mismatch"})
+
+    now = datetime.now(timezone.utc)
+    outcome = await db.spin_outcomes.find_one_and_update(
+        {"spin_token": spin_token, "status": "pending"},
+        {"$set": {"status": "consumed", "consumed_at": now}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if outcome is None:
+        raise HTTPException(status_code=400, detail="spin_token_invalid_or_consumed")
+    exp = outcome["expires_at"]
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    if exp <= now:
+        raise HTTPException(status_code=400, detail="spin_token_expired")
+    if outcome["staff_id"] != staff["_id"] or outcome["campaign_id"] != cid:
+        raise HTTPException(status_code=400, detail="spin_token_mismatch")
+    if outcome["no_prize"]:
+        return {
+            "success": True,
+            "claim_id": None,
+            "prize_type": "no_prize",
+            "reward_code": None,
+            "redirect_url": None,
+            "message": "No prize this time.",
+            "result_token": "",
+        }
+    wid = outcome["wheel_item_id"]
 
     # OTP verification check — always required (real SMS or demo mode)
     five_min_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
@@ -495,6 +570,11 @@ async def complete(
     try:
         result = await db.claims.insert_one(claim)
     except DuplicateKeyError:
+        if reward_code_id:
+            try:
+                await db.reward_codes.delete_one({"_id": reward_code_id})
+            except Exception:
+                pass
         return {"success": False, "message": "This phone number has already claimed a prize."}
 
     if session:
@@ -513,6 +593,7 @@ async def complete(
         "prize_type": item["type"], "reward_code": reward_code,
         "redirect_url": redirect_url if item["type"] == "website" else None,
         "message": "Prize claimed successfully!",
+        "result_token": sign_result_token(str(result.inserted_id)),
     }
 
 
@@ -521,6 +602,8 @@ async def pin_verify(payload: dict, request: Request, db: AsyncIOMotorDatabase =
     staff_code = str(payload.get("staff_code", "")).strip().upper()
     pin = str(payload.get("pin", "")).strip()
     fp = str(payload.get("device_fingerprint", "")).strip()
+    if not fp:
+        return {"success": False, "error": "device_fingerprint_required", "attempts_remaining": 0}
     signature = str(payload.get("token_signature", "")).strip()
     ip = request.client.host if request.client else ""
 
@@ -611,7 +694,13 @@ async def pin_verify(payload: dict, request: Request, db: AsyncIOMotorDatabase =
 
 
 @router.get("/result/{claim_id}")
-async def get_result(claim_id: str, db: AsyncIOMotorDatabase = Depends(get_db)):
+async def get_result(
+    claim_id: str,
+    result_token: str = Query(...),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    if not verify_result_token(claim_id, result_token):
+        raise HTTPException(status_code=403, detail="unauthorized_result")
     claim = await db.claims.find_one({"_id": parse_object_id(claim_id, "claim_id")})
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
