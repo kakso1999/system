@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Menu, LogOut, Wallet, QrCode, Play, Pause, Square, RotateCcw } from "lucide-react";
+import { Menu, LogOut, Wallet, QrCode, Play, Pause, Square, RotateCcw, Zap } from "lucide-react";
 import api from "@/lib/api";
 import { clearAuth } from "@/lib/auth";
 
@@ -32,6 +32,14 @@ interface VipProgress {
   next_level_required: number;
   remaining_valid: number;
   progress_percent: number;
+}
+
+interface BonusTodaySummary {
+  date: string;
+  valid_count: number;
+  rule: { enabled: boolean } | null;
+  tiers: Array<{ threshold: number; amount: number; claimable: boolean; claimed: boolean }>;
+  total_earned_today: number;
 }
 
 function toPoints(value: number) {
@@ -164,6 +172,50 @@ const PauseModal = ({ reason, submitting, error, onReasonChange, onClose, onSubm
   </div>
 );
 
+function BonusSprintCard({ bonus, onOpen }: { bonus: BonusTodaySummary | null; onOpen: () => void }) {
+  const totalTiers = bonus?.tiers.length || 0;
+  const claimable = bonus?.tiers.filter((tier) => tier.claimable).length || 0;
+  const validToday = bonus?.valid_count || 0;
+  const nextTier = bonus?.tiers.find((tier) => !tier.claimed);
+  const progress = nextTier ? Math.min(100, (validToday / Math.max(1, nextTier.threshold)) * 100) : totalTiers > 0 ? 100 : 0;
+
+  return (
+    <section className="bg-surface-container-lowest rounded-xl shadow-sm p-6 space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Daily Sprint</p>
+          <h3 className="text-2xl font-extrabold font-[var(--font-headline)] mt-1 text-primary">今日冲单奖励</h3>
+        </div>
+        <div className="rounded-full bg-primary/10 p-3 text-primary">
+          <Zap className="h-5 w-5" />
+        </div>
+      </div>
+      {bonus?.rule ? (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-surface-container-low p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Valid Today</p>
+              <p className="mt-1 text-2xl font-extrabold font-[var(--font-headline)]">{validToday}</p>
+            </div>
+            <div className="rounded-xl bg-surface-container-low p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Claimable</p>
+              <p className="mt-1 text-2xl font-extrabold font-[var(--font-headline)]">{claimable}/{totalTiers}</p>
+            </div>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-surface-variant">
+            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+          </div>
+        </>
+      ) : (
+        <p className="rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">暂无奖励规则</p>
+      )}
+      <button onClick={onOpen} className="w-full rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary transition-all active:scale-[0.98]">
+        Go to Sprint
+      </button>
+    </section>
+  );
+}
+
 function getDefaultVipProgress(staff: HomeData["staff"]): VipProgress {
   const currentLevel = toNumber(staff.vip_level, 0);
   const currentValid = toNumber(staff.stats.total_valid, 0);
@@ -263,6 +315,7 @@ export default function PromoterHomePage() {
   const [workError, setWorkError] = useState("");
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [pauseReason, setPauseReason] = useState("");
+  const [bonusToday, setBonusToday] = useState<BonusTodaySummary | null>(null);
 
   useEffect(() => { loadHome(); }, []);
 
@@ -284,10 +337,23 @@ export default function PromoterHomePage() {
     setPauseReason("");
   };
 
+  const openBonusSprint = () => {
+    try {
+      window.sessionStorage.setItem("bonus_role", "staff");
+    } catch {
+      // Continue navigation even if session storage is unavailable.
+    }
+    router.push("/bonus");
+  };
+
   const loadHome = async () => {
     try {
-      const res = await api.get("/api/promoter/home");
+      const [res, bonusRes] = await Promise.all([
+        api.get<HomeData>("/api/promoter/home"),
+        api.get<BonusTodaySummary>("/api/promoter/bonus/today").catch(() => null),
+      ]);
       setData(res.data);
+      setBonusToday(bonusRes?.data || null);
       try {
         const vipRes = await api.get("/api/promoter/vip-progress");
         setVipProgress(normalizeVipProgress(vipRes.data, res.data.staff));
@@ -389,6 +455,8 @@ export default function PromoterHomePage() {
             </p>
           </div>
         </section>
+
+        <BonusSprintCard bonus={bonusToday} onOpen={openBonusSprint} />
 
         {/* Commission Card */}
         <section className="grid grid-cols-2 gap-4">
