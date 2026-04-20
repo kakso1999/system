@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
@@ -23,9 +25,18 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
         )
+    if admin.get("status") == "disabled":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+    now = datetime.now(timezone.utc)
+    await db.admins.update_one({"_id": admin["_id"]}, {"$set": {"last_login_at": now}})
     token = create_access_token({"sub": str(admin["_id"]), "role": "admin"})
     refresh = create_refresh_token({"sub": str(admin["_id"]), "role": "admin"})
-    return TokenResponse(access_token=token, refresh_token=refresh, role="admin")
+    return TokenResponse(
+        access_token=token,
+        refresh_token=refresh,
+        role="admin",
+        must_change_password=admin.get("must_change_password", False),
+    )
 
 
 @router.post("/refresh", response_model=TokenResponse)

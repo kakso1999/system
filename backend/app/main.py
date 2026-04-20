@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -20,12 +21,38 @@ async def lifespan(app: FastAPI):
 async def seed_admin():
     settings = get_settings()
     db = get_db()
+    now = datetime.now(timezone.utc)
+    await db.admins.update_many(
+        {"role": {"$exists": False}},
+        {
+            "$set": {
+                "display_name": "Default Admin",
+                "role": "super_admin",
+                "status": "active",
+                "must_change_password": False,
+                "last_login_at": None,
+                "created_by_admin_id": None,
+                "created_at": now,
+                "updated_at": now,
+            }
+        },
+    )
     existing = await db.admins.find_one({"username": settings.DEFAULT_ADMIN_USERNAME})
     if not existing:
-        await db.admins.insert_one({
-            "username": settings.DEFAULT_ADMIN_USERNAME,
-            "password_hash": hash_password(settings.DEFAULT_ADMIN_PASSWORD),
-        })
+        await db.admins.insert_one(
+            {
+                "username": settings.DEFAULT_ADMIN_USERNAME,
+                "password_hash": hash_password(settings.DEFAULT_ADMIN_PASSWORD),
+                "display_name": settings.DEFAULT_ADMIN_USERNAME,
+                "role": "super_admin",
+                "status": "active",
+                "must_change_password": False,
+                "last_login_at": None,
+                "created_by_admin_id": None,
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
 
 
 async def seed_settings():
@@ -81,12 +108,13 @@ app.add_middleware(
 )
 
 # Import and register routers
-from app.routers import admin_auth, staff_auth, campaigns, wheel, reward_codes
+from app.routers import admin_auth, staff_auth, campaigns, wheel, reward_codes, admins
 from app.routers import staff, claims, user_flow, risk_control, settings as settings_router
 from app.routers import promoter, finance, dashboard, external
 
 app.include_router(admin_auth.router, prefix="/api/auth/admin", tags=["Admin Auth"])
 app.include_router(staff_auth.router, prefix="/api/auth/staff", tags=["Staff Auth"])
+app.include_router(admins.router, prefix="/api/admin/admins", tags=["Admin Management"])
 app.include_router(campaigns.router, prefix="/api/admin/campaigns", tags=["Campaigns"])
 app.include_router(wheel.router, prefix="/api/admin/wheel-items", tags=["Wheel Items"])
 app.include_router(reward_codes.router, prefix="/api/admin/reward-codes", tags=["Reward Codes"])

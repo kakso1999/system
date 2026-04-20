@@ -31,6 +31,8 @@ async def get_current_admin(
     admin = await db.admins.find_one({"_id": get_subject_object_id(payload)})
     if not admin:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
+    if admin.get("status") == "disabled":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
     return admin
 
 
@@ -49,3 +51,13 @@ async def get_current_staff(
     if staff.get("status") != "active":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
     return staff
+
+
+async def get_super_admin(
+    admin: dict = Depends(get_current_admin),
+) -> dict:
+    if admin.get("role") != "super_admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super admin required")
+    if admin.get("status") == "disabled":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+    return admin

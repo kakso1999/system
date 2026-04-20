@@ -24,6 +24,7 @@ class TokenResponse(BaseModel):
     refresh_token: str | None = None
     token_type: str = "bearer"
     role: str
+    must_change_password: bool | None = None
 
 
 class RefreshRequest(BaseModel):
