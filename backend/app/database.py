@@ -89,6 +89,10 @@ async def create_indexes():
     await db.promo_sessions.create_index("session_token", unique=True)
     await db.promo_sessions.create_index([("staff_id", 1), ("status", 1)])
     await db.promo_sessions.create_index("expires_at", expireAfterSeconds=3600)
+    # promotion_activity_logs
+    await db.promotion_activity_logs.create_index([("staff_id", 1), ("created_at", -1)])
+    # staff_users last_seen_at for online filtering
+    await db.staff_users.create_index("last_seen_at")
 
 
 def get_db() -> AsyncIOMotorDatabase:

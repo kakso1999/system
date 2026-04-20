@@ -1,10 +1,21 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 StaffStatus = Literal["active", "disabled", "pending_review"]
+STAFF_ONLINE_WINDOW = timedelta(minutes=5)
+
+
+def _ensure_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _is_online(last_seen_at: datetime | None) -> bool:
+    return bool(last_seen_at and datetime.now(timezone.utc) - last_seen_at < STAFF_ONLINE_WINDOW)
 
 
 class LoginRequest(BaseModel):
@@ -63,6 +74,12 @@ class StaffResetPasswordRequest(BaseModel):
     new_password: str
 
 
+class WorkPauseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str
+
+
 class StaffStats(BaseModel):
     total_scans: int
     total_valid: int
@@ -84,11 +101,35 @@ class StaffListItem(BaseModel):
     qr_version: int = 0
     stats: StaffStats
     created_at: datetime
+    work_status: str = "stopped"
+    promotion_paused: bool = False
+    pause_reason: str = ""
+    paused_at: datetime | None = None
+    resumed_at: datetime | None = None
+    started_promoting_at: datetime | None = None
+    stopped_promoting_at: datetime | None = None
+    last_seen_at: datetime | None = None
+    last_login_at: datetime | None = None
+    is_online: bool = False
+
+    @model_validator(mode="after")
+    def populate_runtime_state(self):
+        for field_name in (
+            "created_at",
+            "paused_at",
+            "resumed_at",
+            "started_promoting_at",
+            "stopped_promoting_at",
+            "last_seen_at",
+            "last_login_at",
+        ):
+            setattr(self, field_name, _ensure_utc(getattr(self, field_name)))
+        self.is_online = _is_online(self.last_seen_at)
+        return self
 
 
 class StaffDetail(StaffListItem):
     invite_code: str
     parent_id: str | None = None
     campaign_id: str | None = None
-    qr_version: int = 0
     updated_at: datetime | None = None

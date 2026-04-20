@@ -14,6 +14,7 @@ from app.services.withdrawals import (
     get_withdrawal_balance_snapshot,
 )
 from app.utils.datetime import get_day_start_utc
+from app.schemas.staff import WorkPauseRequest
 from app.utils.helpers import to_str_id, to_str_ids
 from app.utils.live_token import generate_pin, generate_token_signature
 
@@ -394,3 +395,143 @@ async def live_qr_generate(
         "expires_at": expires_at.isoformat(),
         "qr_version": qr_version,
     }
+
+
+# ─── Work status (start/stop/pause/resume) + heartbeat ────────────────────────
+
+async def _log_activity(db, staff_id: ObjectId, action: str, reason: str = "") -> None:
+    await db.promotion_activity_logs.insert_one({
+        "staff_id": staff_id,
+        "action": action,
+        "reason": reason,
+        "created_at": datetime.now(timezone.utc),
+    })
+
+
+def _work_state_response(staff: dict) -> dict:
+    def _iso(dt):
+        return dt.isoformat() if dt else None
+    return {
+        "work_status": staff.get("work_status", "stopped"),
+        "promotion_paused": bool(staff.get("promotion_paused", False)),
+        "pause_reason": staff.get("pause_reason", ""),
+        "paused_at": _iso(staff.get("paused_at")),
+        "resumed_at": _iso(staff.get("resumed_at")),
+        "started_promoting_at": _iso(staff.get("started_promoting_at")),
+        "stopped_promoting_at": _iso(staff.get("stopped_promoting_at")),
+    }
+
+
+@router.post("/work/start")
+async def work_start(
+    current_staff: dict = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    if current_staff.get("work_status", "stopped") != "stopped":
+        raise HTTPException(status_code=400, detail="invalid_transition")
+    now = datetime.now(timezone.utc)
+    await db.staff_users.update_one(
+        {"_id": current_staff["_id"]},
+        {"$set": {
+            "work_status": "promoting",
+            "promotion_paused": False,
+            "pause_reason": "",
+            "started_promoting_at": now,
+            "updated_at": now,
+        }},
+    )
+    await _log_activity(db, current_staff["_id"], "start")
+    staff = await db.staff_users.find_one({"_id": current_staff["_id"]})
+    return _work_state_response(staff)
+
+
+@router.post("/work/stop")
+async def work_stop(
+    current_staff: dict = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    ws = current_staff.get("work_status", "stopped")
+    if ws not in ("promoting", "paused"):
+        raise HTTPException(status_code=400, detail="invalid_transition")
+    now = datetime.now(timezone.utc)
+    await db.staff_users.update_one(
+        {"_id": current_staff["_id"]},
+        {"$set": {
+            "work_status": "stopped",
+            "promotion_paused": False,
+            "stopped_promoting_at": now,
+            "updated_at": now,
+        }},
+    )
+    await _log_activity(db, current_staff["_id"], "stop")
+    staff = await db.staff_users.find_one({"_id": current_staff["_id"]})
+    return _work_state_response(staff)
+
+
+@router.post("/work/pause")
+async def work_pause(
+    payload: WorkPauseRequest,
+    current_staff: dict = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    if current_staff.get("work_status", "stopped") != "promoting":
+        raise HTTPException(status_code=400, detail="invalid_transition")
+    reason = (payload.reason or "").strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="reason_required")
+    now = datetime.now(timezone.utc)
+    await db.staff_users.update_one(
+        {"_id": current_staff["_id"]},
+        {"$set": {
+            "work_status": "paused",
+            "promotion_paused": True,
+            "pause_reason": reason,
+            "paused_at": now,
+            "updated_at": now,
+        }},
+    )
+    await _log_activity(db, current_staff["_id"], "pause", reason)
+    staff = await db.staff_users.find_one({"_id": current_staff["_id"]})
+    return _work_state_response(staff)
+
+
+@router.post("/work/resume")
+async def work_resume(
+    current_staff: dict = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    if current_staff.get("work_status", "stopped") != "paused":
+        raise HTTPException(status_code=400, detail="invalid_transition")
+    now = datetime.now(timezone.utc)
+    await db.staff_users.update_one(
+        {"_id": current_staff["_id"]},
+        {"$set": {
+            "work_status": "promoting",
+            "promotion_paused": False,
+            "resumed_at": now,
+            "updated_at": now,
+        }},
+    )
+    await _log_activity(db, current_staff["_id"], "resume")
+    staff = await db.staff_users.find_one({"_id": current_staff["_id"]})
+    return _work_state_response(staff)
+
+
+@router.post("/heartbeat")
+async def heartbeat(
+    current_staff: dict = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    now = datetime.now(timezone.utc)
+    last = current_staff.get("last_seen_at")
+    # Soft rate limit: if last_seen_at within 20s, no-op
+    if last:
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        if (now - last).total_seconds() < 20:
+            return {"ok": True, "last_seen_at": last.isoformat()}
+    await db.staff_users.update_one(
+        {"_id": current_staff["_id"]},
+        {"$set": {"last_seen_at": now}},
+    )
+    return {"ok": True, "last_seen_at": now.isoformat()}
