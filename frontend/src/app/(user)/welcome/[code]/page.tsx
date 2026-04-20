@@ -16,7 +16,14 @@ interface WheelItemData {
 
 interface WelcomeData {
   staff_name: string;
-  campaign: { id: string; name: string; description: string; rules_text: string; prize_url: string };
+  campaign: {
+    id: string;
+    name: string;
+    description: string;
+    rules_text: string;
+    prize_url: string;
+    no_prize_weight?: number | null;
+  };
   wheel_items: WheelItemData[];
 }
 
@@ -127,6 +134,8 @@ export default function WelcomePage() {
   // Step 2: Prize showcase with fan/carousel
   if (step === "prizes") {
     const items = data.wheel_items;
+    const noPrizeWeight = data.campaign.no_prize_weight ?? 10;
+    const totalWeight = items.reduce((s, i) => s + (i.weight || 0), 0) + noPrizeWeight;
     return (
       <div className="min-h-screen bg-surface flex flex-col">
         <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
@@ -146,6 +155,7 @@ export default function WelcomePage() {
             {items.map((item, i) => {
               const offset = i - activeSlide;
               const isActive = offset === 0;
+              const pct = totalWeight > 0 ? (((item.weight || 0) / totalWeight) * 100).toFixed(1) : "0";
               return (
                 <div
                   key={item.id}
@@ -185,7 +195,7 @@ export default function WelcomePage() {
                       <h3 className="text-xl font-[var(--font-headline)] font-extrabold text-on-surface">
                         {item.display_name}
                       </h3>
-                      <p className="text-xs text-on-surface-variant mt-1">{item.weight}% chance</p>
+                      <p className="text-xs text-on-surface-variant mt-1">{pct}% chance</p>
                     </div>
                   </div>
                 </div>

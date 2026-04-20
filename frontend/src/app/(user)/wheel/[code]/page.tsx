@@ -54,6 +54,7 @@ export default function WheelPage() {
 
   const [items, setItems] = useState<WheelItemData[]>([]);
   const [campaignId, setCampaignId] = useState("");
+  const [noPrizeWeight, setNoPrizeWeight] = useState(10);
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<SpinResult | null>(null);
   const [rotation, setRotation] = useState(0);
@@ -106,6 +107,7 @@ export default function WheelPage() {
       const res = await api.get(`/api/claim/welcome/${code}`);
       setItems(res.data.wheel_items);
       setCampaignId(res.data.campaign.id);
+      setNoPrizeWeight(res.data.campaign.no_prize_weight ?? 10);
       setSmsEnabled(res.data.sms_enabled || false);
     } catch {
       router.push(`/welcome/${code}`);
@@ -122,15 +124,18 @@ export default function WheelPage() {
     const center = size / 2;
     const radius = center - 10;
 
-    const totalPct = items.reduce((s, i) => s + (i.weight || 10), 0);
-    const noPrizePct = Math.max(0, 100 - totalPct);
+    const totalWeight = items.reduce((s, i) => s + (i.weight || 0), 0) + (noPrizeWeight || 0);
     const segments: { name: string; pct: number; color: string }[] = items.map((item, i) => ({
       name: item.display_name,
-      pct: item.weight || 10,
+      pct: totalWeight > 0 ? ((item.weight || 0) / totalWeight) * 100 : 0,
       color: COLORS[i % COLORS.length],
     }));
-    if (noPrizePct > 0) {
-      segments.push({ name: "No Prize", pct: noPrizePct, color: "#c8c8d0" });
+    if (noPrizeWeight > 0 && totalWeight > 0) {
+      segments.push({
+        name: "No Prize",
+        pct: (noPrizeWeight / totalWeight) * 100,
+        color: "#c8c8d0",
+      });
     }
 
     ctx.clearRect(0, 0, size, size);
@@ -182,7 +187,7 @@ export default function WheelPage() {
     ctx.fillStyle = "#0253cd";
     ctx.fill();
     ctx.shadowBlur = 0;
-  }, [items, rotation]);
+  }, [items, noPrizeWeight, rotation]);
 
   useEffect(() => { drawWheel(); }, [drawWheel]);
 
@@ -200,21 +205,25 @@ export default function WheelPage() {
       });
       setResult(res.data);
 
-      const totalPct = items.reduce((s, i) => s + (i.weight || 10), 0);
-      const noPrizePct = Math.max(0, 100 - totalPct);
+      const totalWeight = items.reduce((s, i) => s + (i.weight || 0), 0) + (noPrizeWeight || 0);
       const targetIndex = res.data.result_index;
 
       let targetAngleDeg: number;
-      if (targetIndex === -1) {
-        const noPrizeStart = (totalPct / 100) * 360;
-        targetAngleDeg = 360 - (noPrizeStart + (noPrizePct / 100) * 360 / 2);
-      } else {
-        let angleBefore = 0;
-        for (let i = 0; i < targetIndex; i++) {
-          angleBefore += (items[i].weight || 10);
+      if (totalWeight === 0) {
+        targetAngleDeg = 0;
+      } else if (targetIndex === -1) {
+        let weightBefore = 0;
+        for (let i = 0; i < items.length; i++) {
+          weightBefore += (items[i].weight || 0);
         }
-        const itemPct = items[targetIndex].weight || 10;
-        targetAngleDeg = 360 - ((angleBefore + itemPct / 2) / 100) * 360;
+        targetAngleDeg = 360 - ((weightBefore + noPrizeWeight / 2) / totalWeight) * 360;
+      } else {
+        let weightBefore = 0;
+        for (let i = 0; i < targetIndex; i++) {
+          weightBefore += (items[i].weight || 0);
+        }
+        const itemWeight = items[targetIndex].weight || 0;
+        targetAngleDeg = 360 - ((weightBefore + itemWeight / 2) / totalWeight) * 360;
       }
 
       const totalRotation = 360 * 8 + targetAngleDeg;

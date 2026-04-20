@@ -30,6 +30,7 @@ export interface Campaign {
   end_time: string;
   status: "draft" | "active" | "paused" | "ended";
   rules_text: string;
+  no_prize_weight: number;
   prize_url: string;
   max_claims_per_user: number;
   created_at: string;
