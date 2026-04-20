@@ -52,6 +52,8 @@ function claimMessage(error: unknown) {
   return typeof detail === "string" ? detail : "Claim failed";
 }
 
+type ClaimResponse = ClaimResultData & { result_token: string };
+
 export default function WheelPage() {
   const params = useParams();
   const router = useRouter();
@@ -64,6 +66,7 @@ export default function WheelPage() {
   const [noPrizeWeight, setNoPrizeWeight] = useState(10);
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<SpinResult | null>(null);
+  const [spinToken, setSpinToken] = useState<string | null>(null);
   const [rotation, setRotation] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [deviceFp, setDeviceFp] = useState("");
@@ -122,6 +125,7 @@ export default function WheelPage() {
     setSpinning(true);
     setShowResult(false);
     setClaimResult(null);
+    setSpinToken(null);
     setRedirectCountdown(null);
     try {
       const payload = { campaign_id: campaignId, staff_code: code };
@@ -129,6 +133,7 @@ export default function WheelPage() {
         ? await api.post<SpinResult>("/api/claim/spin", payload, { headers: { "X-Session-Token": sessionToken } })
         : await api.post<SpinResult>("/api/claim/spin", payload);
       setResult(res.data);
+      setSpinToken(res.data.spin_token);
       spinTo(getTargetAngleDeg(items, noPrizeWeight, res.data.result_index));
     } catch (err: unknown) {
       setSpinning(false);
@@ -181,7 +186,7 @@ export default function WheelPage() {
     if (otpCode.length !== 6) return;
     setVerifying(true);
     try {
-      const res = await api.post("/api/claim/verify-otp", { phone, code: otpCode });
+      const res = await api.post("/api/claim/verify-otp", { phone, code: otpCode, campaign_id: campaignId });
       if (res.data.verified) setPhoneVerified(true);
       else alert(res.data.message);
     } catch {
@@ -192,15 +197,18 @@ export default function WheelPage() {
   };
 
   const handleClaim = async () => {
-    if (!result || !phoneVerified) return;
+    if (!result || !phoneVerified || !spinToken) return;
     setClaiming(true);
     try {
-      const payload = { campaign_id: campaignId, staff_code: code, wheel_item_id: result.wheel_item.id, phone, device_fingerprint: deviceFp };
+      const payload = { campaign_id: campaignId, staff_code: code, phone, device_fingerprint: deviceFp, spin_token: spinToken };
       const res = sessionToken
-        ? await api.post("/api/claim/complete", payload, { headers: { "X-Session-Token": sessionToken } })
-        : await api.post("/api/claim/complete", payload);
+        ? await api.post<ClaimResponse>("/api/claim/complete", payload, { headers: { "X-Session-Token": sessionToken } })
+        : await api.post<ClaimResponse>("/api/claim/complete", payload);
       setClaimResult(res.data);
-      if (res.data.success && res.data.claim_id) setRedirectCountdown(res.data.reward_code ? 5 : 2);
+      if (res.data.success && res.data.claim_id) {
+        sessionStorage.setItem("result_token:" + res.data.claim_id, res.data.result_token);
+        setRedirectCountdown(res.data.reward_code ? 5 : 2);
+      }
     } catch (err: unknown) {
       if (sessionErrorCode(err)) {
         setSessionError(SESSION_MESSAGE);

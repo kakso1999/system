@@ -16,6 +16,8 @@ interface ClaimResult {
   redirect_url?: string;
 }
 
+const RESULT_UNAVAILABLE = "Result expired or not available from this device.";
+
 export default function ResultPage() {
   const params = useParams();
   const claimId = params.id as string;
@@ -27,11 +29,17 @@ export default function ResultPage() {
   }, [claimId]);
 
   const loadResult = async () => {
+    const token = sessionStorage.getItem("result_token:" + claimId) || new URLSearchParams(window.location.search).get("result_token");
+    if (!token) {
+      setError(RESULT_UNAVAILABLE);
+      return;
+    }
     try {
-      const res = await api.get(`/api/claim/result/${claimId}`);
+      const res = await api.get(`/api/claim/result/${claimId}?result_token=${encodeURIComponent(token)}`);
       setData(res.data);
-    } catch {
-      setError("Result not found");
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number } };
+      setError(axiosErr.response?.status === 403 ? RESULT_UNAVAILABLE : "Result not found");
     }
   };
 

@@ -7,6 +7,7 @@ export interface WheelItemData {
 
 export interface SpinResult {
   result_index: number;
+  spin_token: string;
   wheel_item: { id: string; display_name: string; type: string; display_text: string; redirect_url?: string };
 }
 
