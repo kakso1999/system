@@ -61,6 +61,7 @@ async def create_campaign(
 ) -> CampaignDetail:
     now = datetime.now(timezone.utc)
     document = payload.model_dump()
+    document["no_prize_weight"] = payload.no_prize_weight
     document.update({"status": "draft", "created_at": now, "updated_at": now})
     result = await db.campaigns.insert_one(document)
     document["_id"] = result.inserted_id
@@ -72,7 +73,9 @@ async def get_campaign(
     campaign_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> CampaignDetail:
-    return CampaignDetail.model_validate(to_str_id(await get_campaign_or_404(db, campaign_id)))
+    campaign = await get_campaign_or_404(db, campaign_id)
+    campaign.setdefault("no_prize_weight", 10)
+    return CampaignDetail.model_validate(to_str_id(campaign))
 
 
 @router.put("/{campaign_id}", response_model=CampaignDetail)
@@ -83,7 +86,10 @@ async def update_campaign(
 ) -> CampaignDetail:
     campaign = await get_campaign_or_404(db, campaign_id)
     updates = payload.model_dump(exclude_unset=True)
+    if updates.get("no_prize_weight") is None:
+        updates.pop("no_prize_weight", None)
     if not updates:
+        campaign.setdefault("no_prize_weight", 10)
         return CampaignDetail.model_validate(to_str_id(campaign))
     updates["updated_at"] = datetime.now(timezone.utc)
     updated = await db.campaigns.find_one_and_update(
@@ -91,6 +97,7 @@ async def update_campaign(
         {"$set": updates},
         return_document=ReturnDocument.AFTER,
     )
+    updated.setdefault("no_prize_weight", 10)
     return CampaignDetail.model_validate(to_str_id(updated))
 
 

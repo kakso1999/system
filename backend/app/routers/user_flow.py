@@ -183,6 +183,7 @@ async def welcome(staff_code: str, request: Request, db: AsyncIOMotorDatabase = 
             "id": str(campaign["_id"]), "name": campaign["name"],
             "description": campaign.get("description", ""),
             "rules_text": campaign.get("rules_text", ""),
+            "no_prize_weight": campaign.get("no_prize_weight", 10),
         },
         "wheel_items": [
             {"id": str(i["_id"]), "display_name": i["display_name"],
@@ -213,14 +214,15 @@ async def spin(payload: dict, request: Request, db: AsyncIOMotorDatabase = Depen
     if not items:
         raise HTTPException(status_code=400, detail="No wheel items")
 
-    total_pct = sum(i.get("weight", 10) for i in items)
-    no_prize_pct = max(0, 100 - total_pct)
-    all_weights = [i.get("weight", 10) for i in items]
-    if no_prize_pct > 0:
-        all_weights.append(no_prize_pct)
+    no_prize_weight = int(campaign.get("no_prize_weight", 10) or 0)
+    all_weights = [int(i.get("weight", 10) or 0) for i in items]
+    if no_prize_weight > 0:
+        all_weights.append(no_prize_weight)
 
     # Use secrets for randomness
     total_weight = sum(all_weights)
+    if total_weight == 0:
+        return no_prize_result()
     rand_val = secrets.randbelow(total_weight)
     chosen = 0
     cumulative = 0

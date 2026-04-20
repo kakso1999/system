@@ -19,6 +19,7 @@ class CampaignCreateRequest(BaseModel):
     rules_text: str = ""
     prize_url: str = ""
     max_claims_per_user: int = Field(1, ge=1)
+    no_prize_weight: int = 10
 
 
 class CampaignUpdateRequest(BaseModel):
@@ -32,6 +33,7 @@ class CampaignUpdateRequest(BaseModel):
     rules_text: str | None = None
     prize_url: str | None = None
     max_claims_per_user: int | None = Field(None, ge=1)
+    no_prize_weight: int | None = None
 
 
 class CampaignStatusUpdateRequest(BaseModel):
@@ -50,6 +52,7 @@ class CampaignDetail(BaseModel):
     rules_text: str = ""
     prize_url: str = ""
     max_claims_per_user: int
+    no_prize_weight: int
     created_at: datetime
     updated_at: datetime | None = None
 
