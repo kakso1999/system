@@ -3,11 +3,12 @@
 import { useRouter, usePathname } from "next/navigation";
 import { clearAuth, getAdminToken } from "@/lib/auth";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Users, Megaphone, Receipt, Wallet, Shield, Settings, ChevronLeft, ChevronRight, LogOut, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Users, Users2, Megaphone, Receipt, Wallet, Shield, Settings, ChevronLeft, ChevronRight, LogOut, ShieldCheck } from "lucide-react";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
   { label: "地推员管理", icon: Users, href: "/staff" },
+  { label: "管理员管理", icon: Users2, href: "/admins" },
   { label: "活动管理", icon: Megaphone, href: "/campaigns" },
   { label: "领取记录", icon: Receipt, href: "/claims" },
   { label: "财务结算", icon: Wallet, href: "/finance" },
