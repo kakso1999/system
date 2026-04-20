@@ -1,14 +1,16 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
+import api from "@/lib/api";
 import { clearAuth, getAdminToken } from "@/lib/auth";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Users, Users2, Megaphone, Receipt, Wallet, Shield, Settings, ChevronLeft, ChevronRight, LogOut, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Users, Users2, Megaphone, Receipt, Wallet, Shield, Settings, ChevronLeft, ChevronRight, LogOut, ShieldCheck, UserPlus } from "lucide-react";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
   { label: "地推员管理", icon: Users, href: "/staff" },
   { label: "管理员管理", icon: Users2, href: "/admins" },
+  { label: "注册审核", icon: UserPlus, href: "/registrations", badgeKey: "registrations_pending" },
   { label: "活动管理", icon: Megaphone, href: "/campaigns" },
   { label: "领取记录", icon: Receipt, href: "/claims" },
   { label: "财务结算", icon: Wallet, href: "/finance" },
@@ -21,6 +23,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [registrationsPendingCount, setRegistrationsPendingCount] = useState(0);
 
   useEffect(() => {
     const token = getAdminToken();
@@ -31,6 +34,35 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
     setCheckingAuth(false);
   }, [router]);
+
+  useEffect(() => {
+    if (checkingAuth) {
+      return;
+    }
+
+    let active = true;
+
+    const loadPendingCount = async () => {
+      try {
+        const res = await api.get<{ count: number }>("/api/admin/registrations/pending-count");
+        if (active) {
+          setRegistrationsPendingCount(Math.max(0, Number(res.data.count || 0)));
+        }
+      } catch {
+        if (active) {
+          setRegistrationsPendingCount(0);
+        }
+      }
+    };
+
+    loadPendingCount();
+    const timer = window.setInterval(loadPendingCount, 60_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [checkingAuth]);
 
   const handleLogout = () => {
     clearAuth("admin");
@@ -70,7 +102,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 }`}
               >
                 <Icon className="w-5 h-5 flex-shrink-0" />
-                {!collapsed && <span>{item.label}</span>}
+                {!collapsed && (
+                  <span className="flex items-center gap-2">
+                    <span>{item.label}</span>
+                    {item.badgeKey === "registrations_pending" && registrationsPendingCount > 0 && (
+                      <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-error px-1.5 py-0.5 text-[10px] font-bold leading-none text-on-error">
+                        {registrationsPendingCount}
+                      </span>
+                    )}
+                  </span>
+                )}
               </a>
             );
           })}
