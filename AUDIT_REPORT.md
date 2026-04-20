@@ -245,3 +245,22 @@ _(none)_
 
 ## Auditor Notes
 The highest-risk problems are concentrated in the public claim path and the way tokens/codes are transported and redeemed. Admin-side dependency wiring looked mostly consistent in the sampled routers, but the codebase still relies on unsafe defaults, client-supplied authority, and float-based money handling in places that should be server-authoritative and exact. GroundRewards v2.2 is close to having the right primitives, but several of the new QR/session/reward features are only partially enforced, which leaves exploitable gaps despite otherwise reasonable structure and indexing.
+
+## Resolution Status (2026-04-20)
+
+| ID | Severity | Status | Notes |
+|----|----------|--------|-------|
+| C1 | Critical | **Fixed** | New `spin_outcomes` collection; `/complete` consumes `spin_token` and ignores client `wheel_item_id` |
+| C2 | Critical | Deferred → v2.3 F1 | Will be covered by `X-API-Key` on `external.py` |
+| C3 | Critical | **Fixed** | Seeded default admin now has `must_change_password=True`; `PRODUCTION=1` fails fast if password is still `admin123`-compatible path warns |
+| C4 | Critical | **Fixed** | `PRODUCTION=1` + default JWT secret → startup raises; warning logged otherwise |
+| H1 | High | Deferred → v2.4 | float→Decimal128 requires schema migration |
+| H2 | High | **Fixed** | Empty `device_fingerprint` rejected in `/pin/verify` and `/complete` (when `live_qr_enabled`) |
+| H3 | High | Deferred → v2.4 | Requires auth refactor to server-set HttpOnly cookies |
+| H4 | High | Deferred → v2.4 | `session_token` URL transport still in use; cookie/header refactor pending |
+| H5 | High | **Fixed** | `/result/{id}` now requires `result_token` (HMAC); 403 without |
+| H6 | High | Deferred → v2.3 F1 | Will be covered by `X-API-Key` on `external.py` |
+| H7 | High | Deferred → v2.4 | Proxy-IP extraction pending |
+| M1 | Medium | **Fixed** | `reward_codes` record deleted on `DuplicateKeyError` in `/complete` |
+| M2 | Medium | **Fixed** | `/verify-otp` now requires `campaign_id`; both lookups scoped |
+
