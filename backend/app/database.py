@@ -97,6 +97,15 @@ async def create_indexes():
     await db.promotion_activity_logs.create_index([("staff_id", 1), ("created_at", -1)])
     # staff_users last_seen_at for online filtering
     await db.staff_users.create_index("last_seen_at")
+    # staff daily sprint bonus
+    await db.staff_bonus_rules.create_index("staff_id", unique=True, sparse=True)
+    await db.bonus_claim_records.create_index(
+        [("staff_id", 1), ("date", 1), ("tier_threshold", 1)], unique=True
+    )
+    await db.bonus_claim_records.create_index([("staff_id", 1), ("created_at", -1)])
+    await db.daily_bonus_settlements.create_index(
+        [("staff_id", 1), ("date", 1)], unique=True
+    )
 
 
 def get_db() -> AsyncIOMotorDatabase:
