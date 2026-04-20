@@ -2,14 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Menu, LogOut, Wallet, QrCode } from "lucide-react";
+import { Menu, LogOut, Wallet, QrCode, Play, Pause, Square, RotateCcw } from "lucide-react";
 import api from "@/lib/api";
 import { clearAuth } from "@/lib/auth";
+
+type WorkStatus = "stopped" | "promoting" | "paused";
+type WorkAction = "start" | "stop" | "pause" | "resume";
 
 interface HomeData {
   staff: {
     id: string; name: string; staff_no: string; vip_level: number;
     invite_code: string; stats: { total_scans: number; total_valid: number; total_commission: number; team_size: number; level1_count: number; level2_count: number; level3_count: number };
+    work_status?: WorkStatus;
+    promotion_paused?: boolean; pause_reason?: string;
+    paused_at?: string | null; resumed_at?: string | null;
+    started_promoting_at?: string | null; stopped_promoting_at?: string | null;
   };
   today: { scans: number; valid_claims: number; commission: number };
   settlement: { available: number; settled: number; pending: number };
@@ -35,6 +42,127 @@ function toNumber(value: unknown, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
+
+function formatRelative(iso: string | null | undefined): string {
+  if (!iso) return "unknown";
+  const time = new Date(iso).getTime();
+  if (!Number.isFinite(time)) return "unknown";
+  const seconds = Math.max(0, Math.floor((Date.now() - time) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return new Date(time).toLocaleDateString();
+}
+
+function getWorkStatus(status: unknown): WorkStatus {
+  return status === "promoting" || status === "paused" || status === "stopped" ? status : "stopped";
+}
+
+function getApiDetail(error: unknown) {
+  const response = (error as { response?: { status?: number; data?: { detail?: unknown } } }).response;
+  if (response?.status !== 400 || typeof response.data?.detail !== "string") {
+    return undefined;
+  }
+  return response.data.detail;
+}
+
+type WorkStatusCardProps = {
+  staff: HomeData["staff"]; workStatus: WorkStatus; submitting: WorkAction | null; workError: string;
+  onAction: (action: WorkAction) => void | Promise<void>; onOpenPause: () => void;
+};
+
+const primaryWorkButton = "flex flex-1 items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 font-bold text-on-primary shadow-md shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-60";
+const pauseWorkButton = "flex flex-1 items-center justify-center gap-2 rounded-full bg-surface-container-low px-5 py-3 font-bold text-primary transition-all active:scale-[0.98] disabled:opacity-60";
+const outlineWorkButton = "flex flex-1 items-center justify-center gap-2 rounded-full border border-outline-variant px-5 py-3 font-bold text-on-surface-variant transition-all active:scale-[0.98] disabled:opacity-60";
+
+const WorkStatusControls = ({ workStatus, submitting, onAction, onOpenPause }: Omit<WorkStatusCardProps, "staff" | "workError">) => {
+  const disabled = !!submitting;
+  if (workStatus === "stopped") {
+    return (
+      <button onClick={() => onAction("start")} disabled={disabled} className={primaryWorkButton.replace("flex-1", "w-full")}>
+        <Play className="h-5 w-5" />{submitting === "start" ? "Starting..." : "Start Promoting"}
+      </button>
+    );
+  }
+  const isPromoting = workStatus === "promoting";
+  const LeadingIcon = isPromoting ? Pause : RotateCcw;
+  const leadingAction = isPromoting ? "pause" : "resume";
+  return (
+    <>
+      <button onClick={isPromoting ? onOpenPause : () => onAction("resume")} disabled={disabled}
+        className={isPromoting ? pauseWorkButton : primaryWorkButton}>
+        <LeadingIcon className="h-5 w-5" />
+        {submitting === leadingAction ? (isPromoting ? "Pausing..." : "Resuming...") : (isPromoting ? "Pause" : "Resume")}
+      </button>
+      <button onClick={() => onAction("stop")} disabled={disabled} className={outlineWorkButton}>
+        <Square className="h-5 w-5" />{submitting === "stop" ? "Stopping..." : "Stop"}
+      </button>
+    </>
+  );
+};
+
+const WorkStatusCard = (props: WorkStatusCardProps) => {
+  const statusTitle = props.workStatus === "promoting" ? "Promoting" : props.workStatus === "paused" ? "Paused" : "Stopped";
+  const badgeText = props.workStatus === "promoting" ? "Active" : props.workStatus === "paused" ? "On Pause" : "Offline";
+  const badgeClass = props.workStatus === "promoting" ? "bg-primary/10 text-primary" : "bg-surface-container-low text-on-surface-variant";
+  const cardClass = props.workStatus === "stopped" ? "bg-surface-container-low" : "bg-surface-container-lowest";
+  const details = props.workStatus === "promoting"
+    ? <p className="text-sm text-on-surface-variant">Promoting since {formatRelative(props.staff.started_promoting_at)}</p>
+    : props.workStatus === "paused"
+      ? <div className="space-y-1 text-sm text-on-surface-variant"><p>Paused: {props.staff.pause_reason || "No reason provided"}</p><p>Paused at {formatRelative(props.staff.paused_at)}</p></div>
+      : <p className="text-sm text-on-surface-variant">Start your session when you are ready to promote.</p>;
+  return (
+    <section className={`${cardClass} rounded-xl shadow-sm p-6 space-y-4`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Work Status</p>
+          <h3 className="text-2xl font-extrabold font-[var(--font-headline)] mt-1 text-primary">{statusTitle}</h3>
+        </div>
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${badgeClass}`}>{badgeText}</span>
+      </div>
+      {details}
+      <div className="flex gap-3">
+        <WorkStatusControls workStatus={props.workStatus} submitting={props.submitting}
+          onAction={props.onAction} onOpenPause={props.onOpenPause} />
+      </div>
+      {props.workError && <p className="text-sm font-semibold text-error">{props.workError}</p>}
+    </section>
+  );
+};
+
+type PauseModalProps = {
+  reason: string; submitting: WorkAction | null; error: string; onReasonChange: (reason: string) => void;
+  onClose: () => void; onSubmit: () => void | Promise<void>;
+};
+
+const PauseModal = ({ reason, submitting, error, onReasonChange, onClose, onSubmit }: PauseModalProps) => (
+  <div onClick={onClose} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm">
+    <div onClick={(event) => event.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-surface-container-lowest p-6 shadow-2xl">
+      <h3 className="text-xl font-extrabold font-[var(--font-headline)] text-on-surface">Pause Promotion</h3>
+      <p className="mt-1 text-sm text-on-surface-variant">Enter a reason before pausing your session.</p>
+      <textarea
+        value={reason}
+        onChange={(event) => onReasonChange(event.target.value)}
+        className="mt-4 h-28 w-full resize-none rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm focus:ring-2 focus:ring-primary/40"
+        placeholder="Pause reason"
+        autoFocus
+      />
+      <div className="mt-4 flex gap-3">
+        <button onClick={onClose} disabled={!!submitting}
+          className="flex-1 rounded-full border border-outline-variant py-3 text-sm font-bold text-on-surface-variant disabled:opacity-60">
+          Cancel
+        </button>
+        <button onClick={onSubmit} disabled={!!submitting || !reason.trim()}
+          className="flex-1 rounded-full bg-primary py-3 text-sm font-bold text-on-primary disabled:opacity-60">
+          {submitting === "pause" ? "Pausing..." : "Pause"}
+        </button>
+      </div>
+      {error && <p className="mt-3 text-sm font-semibold text-error">{error}</p>}
+    </div>
+  </div>
+);
 
 function getDefaultVipProgress(staff: HomeData["staff"]): VipProgress {
   const currentLevel = toNumber(staff.vip_level, 0);
@@ -131,8 +259,30 @@ export default function PromoterHomePage() {
   const [data, setData] = useState<HomeData | null>(null);
   const [vipProgress, setVipProgress] = useState<VipProgress | null>(null);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState<WorkAction | null>(null);
+  const [workError, setWorkError] = useState("");
+  const [showPauseModal, setShowPauseModal] = useState(false);
+  const [pauseReason, setPauseReason] = useState("");
 
   useEffect(() => { loadHome(); }, []);
+
+  useEffect(() => {
+    if (!showPauseModal) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !submitting) {
+        setShowPauseModal(false);
+        setPauseReason("");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showPauseModal, submitting]);
+
+  const closePauseModal = () => {
+    if (submitting) return;
+    setShowPauseModal(false);
+    setPauseReason("");
+  };
 
   const loadHome = async () => {
     try {
@@ -151,6 +301,39 @@ export default function PromoterHomePage() {
     }
   };
 
+  const handleWorkAction = async (action: WorkAction) => {
+    const reason = pauseReason.trim();
+    if (action === "pause" && !reason) return;
+    setSubmitting(action);
+    setWorkError("");
+    try {
+      if (action === "pause") {
+        await api.post("/api/promoter/work/pause", { reason });
+        setShowPauseModal(false);
+        setPauseReason("");
+      } else if (action === "start") {
+        await api.post("/api/promoter/work/start", {});
+      } else if (action === "stop") {
+        await api.post("/api/promoter/work/stop", {});
+      } else {
+        await api.post("/api/promoter/work/resume", {});
+      }
+      await loadHome();
+    } catch (error) {
+      const detail = getApiDetail(error);
+      if (detail === "invalid_transition") {
+        setShowPauseModal(false);
+        setPauseReason("");
+        setWorkError("State changed — refreshing…");
+        await loadHome();
+      } else {
+        setWorkError("Action failed. Please try again.");
+      }
+    } finally {
+      setSubmitting(null);
+    }
+  };
+
   if (loading || !data) {
     return <div className="min-h-screen flex items-center justify-center bg-surface text-on-surface-variant font-semibold">Loading...</div>;
   }
@@ -158,6 +341,7 @@ export default function PromoterHomePage() {
   const s = data.staff;
   const vip = vipProgress ?? getDefaultVipProgress(s);
   const nextLabel = vip.next_level !== null ? VIP_LABELS[vip.next_level] : "Max";
+  const workStatus = getWorkStatus(s.work_status);
 
   return (
     <div className="min-h-screen bg-surface">
@@ -178,6 +362,9 @@ export default function PromoterHomePage() {
           <p className="text-on-surface-variant font-semibold text-sm">Welcome back, {s.name}</p>
           <h2 className="text-3xl font-extrabold font-[var(--font-headline)] tracking-tight mt-1">My Performance</h2>
         </section>
+
+        <WorkStatusCard staff={s} workStatus={workStatus} submitting={submitting} workError={workError}
+          onAction={handleWorkAction} onOpenPause={() => { setWorkError(""); setShowPauseModal(true); }} />
 
         <section className="bg-surface-container-lowest rounded-xl shadow-sm p-6 space-y-4">
           <div className="flex items-start justify-between gap-3">
@@ -279,6 +466,11 @@ export default function PromoterHomePage() {
           </div>
         </section>
       </main>
+
+      {showPauseModal && (
+        <PauseModal reason={pauseReason} submitting={submitting} error={workError}
+          onReasonChange={setPauseReason} onClose={closePauseModal} onSubmit={() => handleWorkAction("pause")} />
+      )}
     </div>
   );
 }

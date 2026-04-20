@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Home, QrCode, Users, Wallet, Coins } from "lucide-react";
 import { clearAuth, getStaffToken } from "@/lib/auth";
+import api from "@/lib/api";
 
 type NavItem = {
   label: string;
@@ -42,6 +43,20 @@ export default function PromoterLayout({ children }: { children: React.ReactNode
     }
     setCheckingAuth(false);
   }, [router]);
+
+  useEffect(() => {
+    if (checkingAuth) return;
+    const sendHeartbeat = () => {
+      if (!getStaffToken()) {
+        clearInterval(intervalId);
+        return;
+      }
+      api.post("/api/promoter/heartbeat", {}).catch(() => {});
+    };
+    const intervalId = window.setInterval(sendHeartbeat, 60_000);
+    sendHeartbeat();
+    return () => window.clearInterval(intervalId);
+  }, [checkingAuth]);
 
   if (checkingAuth) {
     return (
