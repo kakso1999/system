@@ -1,6 +1,7 @@
 import math
 import re
 from datetime import datetime, timezone
+from typing import Literal
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -19,14 +20,16 @@ from app.routers.staff_auth import (
 )
 from app.schemas.common import MessageResponse, PageResponse
 from app.schemas.staff import (
+    STAFF_ONLINE_WINDOW,
     StaffCreateRequest,
     StaffDetail,
+    StaffListItem,
     StaffResetPasswordRequest,
     StaffStatus,
     StaffStatusUpdateRequest,
     StaffUpdateRequest,
 )
-from app.utils.helpers import to_str_id, to_str_ids
+from app.utils.helpers import to_str_id
 from app.utils.security import hash_password
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
@@ -120,18 +123,39 @@ async def list_staff(
     page_size: int = Query(20, ge=1, le=100),
     status_value: StaffStatus | None = Query(None, alias="status"),
     search: str | None = None,
+    online_filter: Literal["true", "false", "all"] = Query("all"),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> PageResponse:
     query: dict = {"status": status_value} if status_value else {}
     if search:
         pattern = {"$regex": re.escape(search), "$options": "i"}
         query["$or"] = [{"name": pattern}, {"phone": pattern}, {"staff_no": pattern}]
+    now = datetime.now(timezone.utc)
+    online_cutoff = now - STAFF_ONLINE_WINDOW
+    if online_filter == "true":
+        query["last_seen_at"] = {"$gt": online_cutoff}
+    elif online_filter == "false":
+        offline_query = {
+            "$or": [
+                {"last_seen_at": None},
+                {"last_seen_at": {"$exists": False}},
+                {"last_seen_at": {"$lte": online_cutoff}},
+            ]
+        }
+        if "$or" in query:
+            query = {"$and": [query, offline_query]}
+        else:
+            query.update(offline_query)
     projection = {"password_hash": 0, "updated_at": 0}
     cursor = db.staff_users.find(query, projection).sort("created_at", -1).skip((page - 1) * page_size).limit(page_size)
     items = await cursor.to_list(length=page_size)
     total = await db.staff_users.count_documents(query)
+    serialized = [
+        StaffListItem.model_validate(serialize_staff(item)).model_dump()
+        for item in items
+    ]
     return PageResponse(
-        items=to_str_ids(items),
+        items=serialized,
         total=total,
         page=page,
         page_size=page_size,
