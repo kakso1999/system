@@ -19,15 +19,6 @@ const navItems = [
   { label: "系统设置", icon: Settings, href: "/settings" },
 ];
 
-function markBonusRoleIntent(href: string) {
-  if (href !== "/bonus") return;
-  try {
-    window.sessionStorage.setItem("bonus_role", "admin");
-  } catch {
-    return;
-  }
-}
-
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -105,7 +96,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             const Icon = item.icon;
             return (
               <a key={item.href} href={item.href}
-                onClick={() => markBonusRoleIntent(item.href)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
                   isActive
                     ? "bg-primary text-on-primary shadow-md shadow-primary/20"

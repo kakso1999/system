@@ -338,12 +338,7 @@ export default function PromoterHomePage() {
   };
 
   const openBonusSprint = () => {
-    try {
-      window.sessionStorage.setItem("bonus_role", "staff");
-    } catch {
-      // Continue navigation even if session storage is unavailable.
-    }
-    router.push("/bonus");
+    router.push("/sprint");
   };
 
   const loadHome = async () => {
