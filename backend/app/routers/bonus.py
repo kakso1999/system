@@ -8,22 +8,32 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from app.database import get_db
-from app.dependencies import get_current_admin
+from app.dependencies import get_current_admin, get_current_staff
 from app.schemas.bonus import (
+    BonusClaimRequest,
     BonusClaimRecordListResponse,
     BonusClaimRecordResponse,
+    BonusClaimResponse,
     BonusRecordStatus,
     BonusRuleListResponse,
     BonusRuleResponse,
     BonusRuleUpsertRequest,
+    BonusTodayResponse,
     DailyBonusSettlementListResponse,
     DailyBonusSettlementResponse,
     SuccessResponse,
 )
-from app.services.bonus import sorted_tiers
+from app.services.bonus import (
+    create_bonus_commission_log,
+    get_bonus_claim_context,
+    get_today_bonus_progress,
+    insert_bonus_claim_record,
+    sorted_tiers,
+)
 from app.utils.helpers import to_str_id
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
+promoter_router = APIRouter()
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -248,3 +258,64 @@ async def promoter_bonus_progress_stub():
 
 async def promoter_bonus_claim_stub():
     raise NotImplementedError("Promoter bonus claim belongs to Wave 2 Task G2.")
+
+
+@promoter_router.get("/today", response_model=BonusTodayResponse)
+async def get_promoter_bonus_today(
+    current_staff: dict = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> BonusTodayResponse:
+    progress = await get_today_bonus_progress(db, current_staff["_id"])
+    return BonusTodayResponse.model_validate(progress)
+
+
+@promoter_router.post("/claim", response_model=BonusClaimResponse)
+async def claim_promoter_bonus(
+    payload: BonusClaimRequest,
+    current_staff: dict = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> BonusClaimResponse:
+    try:
+        date_str, valid_count, rule, tier = await get_bonus_claim_context(
+            db,
+            current_staff["_id"],
+            payload.tier_threshold,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    now = datetime.now(timezone.utc)
+    try:
+        record = await insert_bonus_claim_record(
+            db,
+            current_staff["_id"],
+            date_str,
+            rule,
+            tier,
+            valid_count,
+            now,
+        )
+    except DuplicateKeyError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="already_claimed") from exc
+
+    amount = float(record["amount"])
+    await create_bonus_commission_log(db, current_staff, record["_id"], amount, now)
+    return BonusClaimResponse.model_validate(serialize_bonus_record(record))
+
+
+@promoter_router.get("/history", response_model=BonusClaimRecordListResponse)
+async def list_promoter_bonus_history(
+    date_from: str | None = None,
+    date_to: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_staff: dict = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> BonusClaimRecordListResponse:
+    query = build_list_query(date_from, date_to, None)
+    query["staff_id"] = current_staff["_id"]
+    cursor = db.bonus_claim_records.find(query).sort("created_at", -1)
+    docs = await cursor.skip((page - 1) * page_size).limit(page_size).to_list(length=page_size)
+    total = await db.bonus_claim_records.count_documents(query)
+    items = [BonusClaimRecordResponse.model_validate(serialize_bonus_record(doc)) for doc in docs]
+    return BonusClaimRecordListResponse(items=items, total=total, page=page, page_size=page_size)
