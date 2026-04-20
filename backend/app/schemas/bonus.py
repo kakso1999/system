@@ -78,3 +78,33 @@ class DailyBonusSettlementListResponse(BaseModel):
 
 class SuccessResponse(BaseModel):
     success: bool
+
+
+class BonusTodayTier(BaseModel):
+    threshold: int
+    amount: float
+    reached: bool
+    claimed: bool
+    claimable: bool
+
+
+class BonusTodayResponse(BaseModel):
+    date: str
+    valid_count: int
+    rule: dict | None
+    tiers: list[BonusTodayTier]
+    total_earned_today: float
+
+
+class BonusClaimRequest(BaseModel):
+    tier_threshold: int = Field(..., ge=1)
+
+
+class BonusClaimResponse(BaseModel):
+    id: str
+    date: str
+    tier_threshold: int
+    amount: float
+    valid_count_at_claim: int
+    status: str
+    created_at: datetime

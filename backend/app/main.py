@@ -161,6 +161,7 @@ app.include_router(settings_router.router, prefix="/api/admin/settings", tags=["
 app.include_router(finance.router, prefix="/api/admin/finance", tags=["Finance"])
 app.include_router(dashboard.router, prefix="/api/admin/dashboard", tags=["Dashboard"])
 app.include_router(bonus.router, prefix="/api/admin/bonus", tags=["Bonus"])
+app.include_router(bonus.promoter_router, prefix="/api/promoter/bonus", tags=["Promoter Bonus"])
 app.include_router(user_flow.router, prefix="/api/claim", tags=["User Claim Flow"])
 app.include_router(promoter.router, prefix="/api/promoter", tags=["Promoter"])
 app.include_router(external.router, prefix="/api/external", tags=["External"])
