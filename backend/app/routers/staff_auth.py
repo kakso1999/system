@@ -10,6 +10,7 @@ from pymongo.errors import DuplicateKeyError
 
 from app.database import get_db
 from app.dependencies import get_current_staff
+from app.routers.user_flow import validate_phone
 from app.schemas.common import MessageResponse, TokenResponse, RefreshRequest
 from app.schemas.staff import (
     ChangePasswordRequest,
@@ -170,30 +171,41 @@ async def register(
     payload: StaffRegisterRequest,
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
-    await ensure_unique_staff_fields(db, payload.username, payload.phone)
+    phone = validate_phone(payload.phone)
+    await ensure_unique_staff_fields(db, payload.username, phone)
     parent = None
     if payload.invite_code:
         parent = await db.staff_users.find_one({"invite_code": payload.invite_code.upper()})
         if not parent:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite code not found")
+    if await db.staff_registration_applications.find_one(
+        {"username": payload.username, "status": {"$in": ["pending", "approved"]}},
+        {"_id": 1},
+    ):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already applied")
+    if await db.staff_registration_applications.find_one(
+        {"phone": phone, "status": {"$in": ["pending", "approved"]}},
+        {"_id": 1},
+    ):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Phone already applied")
     created_at = datetime.now(timezone.utc)
-    document = build_staff_document(
-        name=payload.name,
-        phone=payload.phone,
-        username=payload.username,
-        password=payload.password,
-        invite_code=await generate_invite_code(db),
-        staff_no=generate_staff_no(),
-        created_at=created_at,
-        status_value="pending_review",
-        parent_id=parent["_id"] if parent else None,
-        campaign_id=parent.get("campaign_id") if parent else None,
-    )
+    document = {
+        "name": payload.name,
+        "phone": phone,
+        "username": payload.username,
+        "password_hash": hash_password(payload.password),
+        "invite_code": payload.invite_code.upper() if payload.invite_code else None,
+        "status": "pending",
+        "rejection_reason": "",
+        "applied_at": created_at,
+        "reviewed_at": None,
+        "reviewed_by_admin_id": None,
+        "approved_staff_id": None,
+    }
     try:
-        result = await db.staff_users.insert_one(document)
-        await create_relation_records(db, result.inserted_id, document["parent_id"], created_at)
+        await db.staff_registration_applications.insert_one(document)
     except DuplicateKeyError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username, phone, or invite code already exists") from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username or phone already applied") from exc
     return MessageResponse(message="Registration submitted, pending admin approval")
 
 

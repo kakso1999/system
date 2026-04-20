@@ -28,6 +28,9 @@ async def create_indexes():
     await db.staff_users.create_index("invite_code", unique=True)
     await db.staff_users.create_index("phone")
     await db.staff_users.create_index("parent_id")
+    await db.staff_registration_applications.create_index("username", unique=True)
+    await db.staff_registration_applications.create_index("phone", unique=True)
+    await db.staff_registration_applications.create_index([("status", 1), ("applied_at", -1)])
     # staff_relations
     await db.staff_relations.create_index(
         [("staff_id", 1), ("ancestor_id", 1)], unique=True
