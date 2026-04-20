@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.database import get_db
+from app.dependencies import get_api_key
 
 router = APIRouter()
 
@@ -13,7 +14,11 @@ def normalize_code(code: str) -> str:
 
 
 @router.get("/reward-code/{code}/check")
-async def check_reward_code(code: str, db: AsyncIOMotorDatabase = Depends(get_db)):
+async def check_reward_code(
+    code: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: str = Depends(get_api_key),
+):
     """Check if a reward code exists and its status."""
     rc = await db.reward_codes.find_one({"code": normalize_code(code)})
     if not rc:
@@ -28,7 +33,11 @@ async def check_reward_code(code: str, db: AsyncIOMotorDatabase = Depends(get_db
 
 
 @router.post("/reward-code/{code}/redeem")
-async def redeem_reward_code(code: str, db: AsyncIOMotorDatabase = Depends(get_db)):
+async def redeem_reward_code(
+    code: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: str = Depends(get_api_key),
+):
     """Mark a reward code as redeemed. Only works if status is 'assigned'."""
     normalized = normalize_code(code)
     now = datetime.now(timezone.utc)

@@ -99,6 +99,7 @@ async def seed_settings():
         {"key": "team_reward_1000", "value": 500, "group": "team_reward", "description": "Team reward 1000 amount"},
         {"key": "team_reward_10000_threshold", "value": 10000, "group": "team_reward", "description": "Team reward 10000 threshold"},
         {"key": "team_reward_10000", "value": 1000, "group": "team_reward", "description": "Team reward 10000 amount"},
+        {"key": "external_api_key", "value": "PLEASE_SET_API_KEY", "group": "integration", "description": "X-API-Key required for /api/external/* endpoints (rotate before production)"},
     ]
     for item in defaults:
         await db.system_settings.update_one(
