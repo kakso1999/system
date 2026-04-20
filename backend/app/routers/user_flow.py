@@ -12,6 +12,7 @@ from app.database import get_db
 from app.services.commission import calculate_commissions
 from app.services.team_reward import check_team_rewards
 from app.services.vip import check_vip_upgrade
+from app.utils.live_token import generate_session_token
 from app.utils.sms import send_sms
 
 router = APIRouter()
@@ -467,6 +468,100 @@ async def complete(
         "prize_type": item["type"], "reward_code": reward_code,
         "redirect_url": redirect_url if item["type"] == "website" else None,
         "message": "Prize claimed successfully!",
+    }
+
+
+@router.post("/pin/verify")
+async def pin_verify(payload: dict, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    staff_code = str(payload.get("staff_code", "")).strip().upper()
+    pin = str(payload.get("pin", "")).strip()
+    fp = str(payload.get("device_fingerprint", "")).strip()
+    signature = str(payload.get("token_signature", "")).strip()
+    ip = request.client.host if request.client else ""
+
+    if not staff_code or not pin or not signature:
+        return {"success": False, "error": "invalid_signature", "attempts_remaining": 0}
+
+    now = datetime.now(timezone.utc)
+    one_min_ago = now - timedelta(minutes=1)
+    recent = await db.risk_logs.count_documents({
+        "ip": ip, "type": "pin_verify_attempt", "created_at": {"$gte": one_min_ago}
+    })
+    if recent >= 20:
+        return {"success": False, "error": "rate_limited", "attempts_remaining": 0}
+    await db.risk_logs.insert_one({
+        "ip": ip, "type": "pin_verify_attempt", "created_at": now,
+        "phone": "", "campaign_id": None, "device_fingerprint": fp, "reason": "",
+    })
+
+    staff = await db.staff_users.find_one({"invite_code": staff_code})
+    if not staff:
+        return {"success": False, "error": "not_found", "attempts_remaining": 0}
+
+    token = await db.promo_live_tokens.find_one({
+        "token_signature": signature, "staff_id": staff["_id"], "status": "active",
+    })
+    if not token:
+        return {"success": False, "error": "not_found", "attempts_remaining": 0}
+
+    token_exp = token["expires_at"]
+    if token_exp.tzinfo is None:
+        token_exp = token_exp.replace(tzinfo=timezone.utc)
+    if token_exp <= now:
+        await db.promo_live_tokens.update_one({"_id": token["_id"]}, {"$set": {"status": "expired"}})
+        return {"success": False, "error": "expired", "attempts_remaining": 0}
+
+    max_fails = int(await get_setting(db, "live_pin_max_fails") or 5)
+    if token.get("failures", 0) >= max_fails:
+        await db.promo_live_tokens.update_one({"_id": token["_id"]}, {"$set": {"status": "locked"}})
+        return {"success": False, "error": "locked", "attempts_remaining": 0}
+
+    if token["pin"] != pin:
+        new_fails = token.get("failures", 0) + 1
+        new_status = "locked" if new_fails >= max_fails else "active"
+        await db.promo_live_tokens.update_one(
+            {"_id": token["_id"]},
+            {"$set": {"failures": new_fails, "status": new_status}},
+        )
+        return {
+            "success": False,
+            "error": "locked" if new_status == "locked" else "invalid_pin",
+            "attempts_remaining": max(0, max_fails - new_fails),
+        }
+
+    await db.promo_live_tokens.update_one(
+        {"_id": token["_id"]},
+        {"$set": {"status": "consumed", "consumed_at": now, "consumed_device_fingerprint": fp}},
+    )
+
+    session_expires_min = int(await get_setting(db, "promo_session_expires_min") or 30)
+    session_token = generate_session_token()
+    session_expires_at = now + timedelta(minutes=session_expires_min)
+
+    await db.promo_sessions.insert_one({
+        "staff_id": staff["_id"],
+        "campaign_id": staff.get("campaign_id"),
+        "live_token_id": token["_id"],
+        "session_token": session_token,
+        "device_fingerprint": fp,
+        "ip": ip,
+        "user_agent": request.headers.get("user-agent", ""),
+        "status": "active",
+        "created_at": now,
+        "expires_at": session_expires_at,
+        "consumed_at": None,
+    })
+
+    campaign = await db.campaigns.find_one({"_id": staff.get("campaign_id")}) if staff.get("campaign_id") else None
+    return {
+        "success": True,
+        "session_token": session_token,
+        "expires_at": session_expires_at.isoformat(),
+        "campaign": {
+            "id": str(staff["campaign_id"]) if staff.get("campaign_id") else "",
+            "name": campaign.get("name", "") if campaign else "",
+            "description": campaign.get("description", "") if campaign else "",
+        },
     }
 
 
