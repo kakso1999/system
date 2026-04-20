@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,6 +8,8 @@ from pathlib import Path
 from app.database import connect_db, close_db, get_db
 from app.config import get_settings
 from app.utils.security import hash_password
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -29,7 +32,7 @@ async def seed_admin():
                 "display_name": "Default Admin",
                 "role": "super_admin",
                 "status": "active",
-                "must_change_password": False,
+                "must_change_password": True,
                 "last_login_at": None,
                 "created_by_admin_id": None,
                 "created_at": now,
@@ -39,6 +42,11 @@ async def seed_admin():
     )
     existing = await db.admins.find_one({"username": settings.DEFAULT_ADMIN_USERNAME})
     if not existing:
+        if settings.DEFAULT_ADMIN_PASSWORD == "admin123":
+            logger.warning(
+                "Seeding default admin with insecure password 'admin123'. "
+                "Will be forced to change on first login."
+            )
         await db.admins.insert_one(
             {
                 "username": settings.DEFAULT_ADMIN_USERNAME,
@@ -46,7 +54,7 @@ async def seed_admin():
                 "display_name": settings.DEFAULT_ADMIN_USERNAME,
                 "role": "super_admin",
                 "status": "active",
-                "must_change_password": False,
+                "must_change_password": True,
                 "last_login_at": None,
                 "created_by_admin_id": None,
                 "created_at": now,

@@ -1,3 +1,6 @@
+import base64
+import hashlib
+import hmac
 from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
 from jose import jwt, JWTError
@@ -40,3 +43,18 @@ def decode_token(token: str) -> dict | None:
         return payload
     except JWTError:
         return None
+
+
+def sign_result_token(claim_id: str) -> str:
+    """HMAC-SHA256 token binding a claim_id to the current JWT secret."""
+    secret = get_settings().JWT_SECRET_KEY.encode()
+    mac = hmac.new(secret, claim_id.encode(), hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(mac).decode().rstrip("=")
+
+
+def verify_result_token(claim_id: str, token: str) -> bool:
+    """Constant-time check of a signed result token."""
+    if not token:
+        return False
+    expected = sign_result_token(claim_id)
+    return hmac.compare_digest(expected, token)

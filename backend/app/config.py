@@ -1,5 +1,10 @@
+import logging
+import os
 from functools import lru_cache
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
 
 
 def parse_csv_setting(value: str) -> list[str]:
@@ -18,6 +23,20 @@ class Settings(BaseSettings):
     SMS_ENABLED: bool = False
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3006"
     REPORT_TIMEZONE: str = "Asia/Manila"
+
+    @model_validator(mode="after")
+    def _validate_secrets(self):
+        if self.JWT_SECRET_KEY == "change-me":
+            if os.getenv("PRODUCTION") == "1":
+                raise RuntimeError(
+                    "Refusing to start: default JWT_SECRET_KEY in production. "
+                    "Set JWT_SECRET_KEY env var."
+                )
+            if os.getenv("ALLOW_INSECURE_JWT") != "1":
+                logger.warning(
+                    "JWT_SECRET_KEY is the default 'change-me'. Set JWT_SECRET_KEY for production."
+                )
+        return self
 
     @property
     def cors_origin_list(self) -> list[str]:

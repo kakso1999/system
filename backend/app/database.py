@@ -89,6 +89,10 @@ async def create_indexes():
     await db.promo_sessions.create_index("session_token", unique=True)
     await db.promo_sessions.create_index([("staff_id", 1), ("status", 1)])
     await db.promo_sessions.create_index("expires_at", expireAfterSeconds=3600)
+    # spin_outcomes
+    await db.spin_outcomes.create_index("spin_token", unique=True)
+    await db.spin_outcomes.create_index("expires_at", expireAfterSeconds=0)
+    await db.spin_outcomes.create_index([("staff_id", 1), ("created_at", -1)])
     # promotion_activity_logs
     await db.promotion_activity_logs.create_index([("staff_id", 1), ("created_at", -1)])
     # staff_users last_seen_at for online filtering
