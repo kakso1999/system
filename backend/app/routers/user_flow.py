@@ -185,8 +185,10 @@ async def welcome(
     staff_code: str,
     request: Request,
     session_token: str | None = None,
+    session_token_header: str | None = Header(None, alias="X-Session-Token"),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
+    effective_session_token = session_token_header or session_token
     staff = await db.staff_users.find_one({"invite_code": staff_code.upper()})
     if not staff:
         raise HTTPException(status_code=404, detail="Promoter not found")
@@ -196,7 +198,7 @@ async def welcome(
     if not campaign:
         raise HTTPException(status_code=404, detail="No active campaign")
     if await get_setting(db, "live_qr_enabled"):
-        await _require_active_session(db, session_token, staff["_id"])
+        await _require_active_session(db, effective_session_token, staff["_id"])
 
     await db.staff_users.update_one({"_id": staff["_id"]}, {"$inc": {"stats.total_scans": 1}})
     await db.scan_logs.insert_one({

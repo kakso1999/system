@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, ChevronRight, Gift, Star, Sparkles } from "lucide-react";
 import confetti from "canvas-confetti";
 import api, { resolveApiUrl } from "@/lib/api";
+import { readSessionToken, writeSessionToken } from "@/lib/session-token";
 
 interface WheelItemData {
   id: string;
@@ -34,7 +35,8 @@ export default function WelcomePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const code = params.code as string;
-  const sessionToken = searchParams.get("session_token");
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const token = sessionToken ?? readSessionToken(code) ?? searchParams.get("session_token");
   const [data, setData] = useState<WelcomeData | null>(null);
   const [error, setError] = useState("");
   const [step, setStep] = useState<Step>("welcome");
@@ -42,8 +44,21 @@ export default function WelcomePage() {
   const confettiFired = useRef(false);
 
   useEffect(() => {
-    if (code) loadWelcome();
-  }, [code]);
+    if (!code) return;
+    const fromUrl = searchParams.get("session_token");
+    if (fromUrl) {
+      writeSessionToken(code, fromUrl);
+      router.replace(`/welcome/${code}`);
+      setSessionToken(fromUrl);
+    } else {
+      setSessionToken(readSessionToken(code));
+    }
+  }, [code, searchParams, router]);
+
+  useEffect(() => {
+    if (!code) return;
+    loadWelcome();
+  }, [code, token]);
 
   // Fire confetti on welcome step
   useEffect(() => {
@@ -58,8 +73,9 @@ export default function WelcomePage() {
 
   const loadWelcome = async () => {
     try {
-      const url = sessionToken ? `/api/claim/welcome/${code}?session_token=${encodeURIComponent(sessionToken)}` : `/api/claim/welcome/${code}`;
-      const res = await api.get(url);
+      const res = await api.get(`/api/claim/welcome/${code}`, {
+        headers: token ? { "X-Session-Token": token } : {},
+      });
       setData(res.data);
     } catch {
       setError("Activity not found or has ended");
@@ -215,7 +231,7 @@ export default function WelcomePage() {
           </div>
 
           <button
-            onClick={() => router.push(sessionToken ? `/wheel/${code}?session_token=${encodeURIComponent(sessionToken)}` : `/wheel/${code}`)}
+            onClick={() => router.push(`/wheel/${code}`)}
             className="w-full max-w-sm bg-gradient-to-r from-primary to-primary-dim text-white rounded-full px-10 py-5 shadow-2xl shadow-primary/40 font-[var(--font-headline)] font-bold text-lg active:scale-95 transition-all flex items-center justify-center gap-2"
           >
             SPIN THE WHEEL <ChevronRight className="w-5 h-5" />

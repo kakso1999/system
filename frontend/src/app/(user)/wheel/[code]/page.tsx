@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, ArrowLeft, ChevronDown, PartyPopper } from "lucide-react";
 import api from "@/lib/api";
+import { readSessionToken, writeSessionToken } from "@/lib/session-token";
 import SponsorsCarousel from "@/components/sponsors-carousel";
 import { ClaimResultCard } from "./claim-result";
 import { OtpClaimCard } from "./otp-claim-card";
@@ -36,8 +37,8 @@ function generateDeviceFingerprint(): string {
 
 const SESSION_MESSAGE = "Session expired or invalid. Please scan the QR again.";
 
-function welcomeUrl(code: string, token: string | null) {
-  return token ? `/api/claim/welcome/${code}?session_token=${encodeURIComponent(token)}` : `/api/claim/welcome/${code}`;
+function welcomeUrl(code: string) {
+  return `/api/claim/welcome/${code}`;
 }
 
 function sessionErrorCode(error: unknown) {
@@ -61,7 +62,8 @@ export default function WheelPage() {
   const searchParams = useSearchParams();
   const code = params.code as string;
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [sessionToken, setSessionToken] = useState<string | null>(searchParams.get("session_token"));
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const token = sessionToken ?? readSessionToken(code) ?? searchParams.get("session_token");
   const [items, setItems] = useState<WheelItemData[]>([]);
   const [campaignId, setCampaignId] = useState("");
   const [noPrizeWeight, setNoPrizeWeight] = useState(10);
@@ -84,9 +86,22 @@ export default function WheelPage() {
   const [claimResult, setClaimResult] = useState<ClaimResultData | null>(null);
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
 
-  useEffect(() => { setSessionToken(searchParams.get("session_token")); }, [searchParams]);
+  useEffect(() => {
+    if (!code) return;
+    const fromUrl = searchParams.get("session_token");
+    if (fromUrl) {
+      writeSessionToken(code, fromUrl);
+      router.replace(`/wheel/${code}`);
+      setSessionToken(fromUrl);
+    } else {
+      setSessionToken(readSessionToken(code));
+    }
+  }, [code, searchParams, router]);
   useEffect(() => { setDeviceFp(generateDeviceFingerprint()); }, []);
-  useEffect(() => { if (code) loadWheel(); }, [code, sessionToken]);
+  useEffect(() => {
+    if (!code) return;
+    loadWheel();
+  }, [code, token]);
 
   useEffect(() => {
     if (otpCooldown <= 0) return;
@@ -111,13 +126,15 @@ export default function WheelPage() {
 
   const loadWheel = async () => {
     try {
-      const res = await api.get(welcomeUrl(code, sessionToken));
+      const res = await api.get(welcomeUrl(code), {
+        headers: token ? { "X-Session-Token": token } : {},
+      });
       setItems(res.data.wheel_items);
       setCampaignId(res.data.campaign.id);
       setNoPrizeWeight(res.data.campaign.no_prize_weight ?? 10);
       setSmsEnabled(res.data.sms_enabled || false);
     } catch {
-      router.push(sessionToken ? `/welcome/${code}?session_token=${encodeURIComponent(sessionToken)}` : `/welcome/${code}`);
+      router.push(`/welcome/${code}`);
     }
   };
 
