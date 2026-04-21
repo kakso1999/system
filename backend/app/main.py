@@ -101,6 +101,14 @@ async def seed_settings():
         {"key": "team_reward_10000_threshold", "value": 10000, "group": "team_reward", "description": "Team reward 10000 threshold"},
         {"key": "team_reward_10000", "value": 1000, "group": "team_reward", "description": "Team reward 10000 amount"},
         {"key": "external_api_key", "value": "PLEASE_SET_API_KEY", "group": "integration", "description": "X-API-Key required for /api/external/* endpoints (rotate before production)"},
+        {"key": "project_name", "value": "GroundRewards", "group": "general", "description": "Brand / project name shown in headers"},
+        {"key": "activity_title", "value": "Lucky Wheel", "group": "general", "description": "Activity title shown to end users"},
+        {"key": "activity_desc", "value": "", "group": "general", "description": "Activity description shown to end users"},
+        {"key": "default_redirect_url", "value": "", "group": "general", "description": "Default redirect URL used by reward codes when no per-item redirect_url is set"},
+        {"key": "sms_cooldown_sec", "value": 60, "group": "risk_control", "description": "Minimum seconds between OTP requests for the same phone"},
+        {"key": "phone_daily_limit", "value": 3, "group": "risk_control", "description": "Maximum OTP requests per phone in a rolling 10-minute window"},
+        {"key": "ip_daily_limit", "value": 20, "group": "risk_control", "description": "Maximum OTP requests per IP inside ip_window_min"},
+        {"key": "ip_window_min", "value": 60, "group": "risk_control", "description": "Rolling window in minutes for ip_daily_limit"},
     ]
     for item in defaults:
         await db.system_settings.update_one(

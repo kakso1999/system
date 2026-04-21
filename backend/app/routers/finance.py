@@ -79,9 +79,12 @@ async def staff_performance(
         pending_p = [{"$match": {"beneficiary_staff_id": sid, "status": {"$in": ["pending", "approved"]}}}, {"$group": {"_id": None, "t": {"$sum": "$amount"}}}]
         paid_r = await db.commission_logs.aggregate(paid_p).to_list(length=1)
         pending_r = await db.commission_logs.aggregate(pending_p).to_list(length=1)
+        bonus_p = [{"$match": {"beneficiary_staff_id": sid, "type": "bonus"}}, {"$group": {"_id": None, "t": {"$sum": "$amount"}}}]
+        bonus_r = await db.commission_logs.aggregate(bonus_p).to_list(length=1)
         item = to_str_id(dict(s))
         item["paid_amount"] = paid_r[0]["t"] if paid_r else 0
         item["pending_amount"] = pending_r[0]["t"] if pending_r else 0
+        item["total_bonus"] = bonus_r[0]["t"] if bonus_r else 0
         item["settlement_pending"] = await sum_claim_commission(
             db,
             {"staff_id": sid, **unpaid_settlement_filter()},

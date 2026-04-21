@@ -342,22 +342,38 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
 
     ip = request.client.host if request.client else ""
 
-    # Rate limit: max 3 OTPs per phone in 10 minutes
-    ten_min_ago = datetime.now(timezone.utc) - timedelta(minutes=10)
+    now = datetime.now(timezone.utc)
+    cooldown_sec = int(await get_setting(db, "sms_cooldown_sec") or 60)
+    if cooldown_sec > 0:
+        recent = await db.otp_records.find_one(
+            {"phone": phone}, sort=[("created_at", -1)]
+        )
+        if recent and recent.get("created_at"):
+            last_ts = recent["created_at"]
+            if last_ts.tzinfo is None:
+                last_ts = last_ts.replace(tzinfo=timezone.utc)
+            if (now - last_ts).total_seconds() < cooldown_sec:
+                await log_risk(db, campaign_id, phone, ip, "",
+                               "otp_cooldown", f"Phone {phone[-4:]} cooldown active")
+                return {"verified": False, "message": "Please wait before requesting another code."}
+
+    phone_limit = int(await get_setting(db, "phone_daily_limit") or 3)
+    ten_min_ago = now - timedelta(minutes=10)
     recent_otp_count = await db.otp_records.count_documents({
         "phone": phone, "created_at": {"$gte": ten_min_ago}
     })
-    if recent_otp_count >= 3:
+    if recent_otp_count >= phone_limit:
         await log_risk(db, campaign_id, phone, ip, "",
                        "otp_rate_limit", f"Phone {phone[-4:]} requested too many OTPs")
         return {"verified": False, "message": "Too many requests. Please wait a few minutes."}
 
-    # Rate limit: max 10 OTP requests per IP per hour
-    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    ip_limit = int(await get_setting(db, "ip_daily_limit") or 20)
+    ip_window_min = int(await get_setting(db, "ip_window_min") or 60)
+    ip_window_ago = now - timedelta(minutes=ip_window_min)
     ip_otp_count = await db.otp_records.count_documents({
-        "ip": ip, "created_at": {"$gte": one_hour_ago}
+        "ip": ip, "created_at": {"$gte": ip_window_ago}
     })
-    if ip_otp_count >= 10:
+    if ip_otp_count >= ip_limit:
         await log_risk(db, campaign_id, phone, ip, "",
                        "otp_ip_rate_limit", f"IP {ip} too many OTP requests")
         return {"verified": False, "message": "Too many requests from this network."}
