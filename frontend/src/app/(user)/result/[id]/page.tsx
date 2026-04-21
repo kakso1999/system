@@ -23,6 +23,7 @@ export default function ResultPage() {
   const claimId = params.id as string;
   const [data, setData] = useState<ClaimResult | null>(null);
   const [error, setError] = useState("");
+  const [downloading, setDownloading] = useState<boolean>(false);
 
   useEffect(() => {
     if (claimId) loadResult();
@@ -40,6 +41,71 @@ export default function ResultPage() {
     } catch (err: unknown) {
       const axiosErr = err as { response?: { status?: number } };
       setError(axiosErr.response?.status === 403 ? RESULT_UNAVAILABLE : "Result not found");
+    }
+  };
+
+  const handleDownloadImage = async () => {
+    if (!data?.reward_code || downloading) return;
+
+    setDownloading(true);
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = 720;
+      canvas.height = 960;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas not supported");
+
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "#6750A4";
+      ctx.fillRect(0, 0, canvas.width, 160);
+
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 44px Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText("GroundRewards", canvas.width / 2, 100);
+
+      ctx.fillStyle = "#6750A4";
+      ctx.font = "bold 22px Arial, sans-serif";
+      ctx.fillText("YOUR REWARD CODE", canvas.width / 2, 270);
+
+      ctx.fillStyle = "#1C1B1F";
+      ctx.font = "bold 72px monospace";
+      ctx.fillText(data.reward_code, canvas.width / 2, 380);
+
+      ctx.fillStyle = "#49454F";
+      ctx.font = "22px Arial, sans-serif";
+      ctx.fillText("Show this code at the shop to redeem.", canvas.width / 2, 460);
+
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(
+        `${window.location.origin}/mock-redeem?code=${data.reward_code}`
+      )}`;
+      const qrImage = new Image();
+      qrImage.crossOrigin = "anonymous";
+      await new Promise<void>((resolve, reject) => {
+        qrImage.onload = () => resolve();
+        qrImage.onerror = () => reject(new Error("QR load failed"));
+        qrImage.src = qrUrl;
+      });
+      ctx.drawImage(qrImage, 200, 560, 320, 320);
+
+      ctx.fillStyle = "#6750A4";
+      ctx.font = "18px Arial, sans-serif";
+      ctx.fillText("Claim powered by GroundRewards", canvas.width / 2, 930);
+
+      const dataUrl = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = `reward-${data.reward_code}.png`;
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -96,6 +162,13 @@ export default function ResultPage() {
                   className="mt-3 text-sm text-primary font-bold hover:underline"
                 >
                   Copy Code
+                </button>
+                <button
+                  onClick={handleDownloadImage}
+                  disabled={downloading}
+                  className="mt-2 text-sm text-primary font-bold hover:underline disabled:opacity-50"
+                >
+                  {downloading ? "Preparing..." : "Download Reward Image"}
                 </button>
               </div>
             )}
