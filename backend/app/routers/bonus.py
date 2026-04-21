@@ -8,7 +8,7 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from app.database import get_db
-from app.dependencies import get_current_admin, get_current_staff
+from app.dependencies import get_current_staff, get_super_admin
 from app.schemas.bonus import (
     BonusClaimRequest,
     BonusClaimRecordListResponse,
@@ -32,7 +32,7 @@ from app.services.bonus import (
 )
 from app.utils.helpers import to_str_id
 
-router = APIRouter(dependencies=[Depends(get_current_admin)])
+router = APIRouter(dependencies=[Depends(get_super_admin)])
 promoter_router = APIRouter()
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -164,7 +164,7 @@ async def list_bonus_rules(
 @router.post("/rules", response_model=BonusRuleResponse)
 async def upsert_bonus_rule(
     payload: BonusRuleUpsertRequest,
-    current_admin: dict = Depends(get_current_admin),
+    current_admin: dict = Depends(get_super_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> BonusRuleResponse:
     staff_id = parse_optional_object_id(payload.staff_id, "staff_id")

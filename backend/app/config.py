@@ -26,15 +26,18 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_secrets(self):
-        if self.JWT_SECRET_KEY == "change-me":
+        key = (self.JWT_SECRET_KEY or "").strip()
+        insecure = (not key) or (self.JWT_SECRET_KEY == "change-me")
+        if insecure:
             if os.getenv("PRODUCTION") == "1":
                 raise RuntimeError(
-                    "Refusing to start: default JWT_SECRET_KEY in production. "
-                    "Set JWT_SECRET_KEY env var."
+                    "Refusing to start: insecure JWT_SECRET_KEY in production. "
+                    "Set a non-empty, non-default JWT_SECRET_KEY env var."
                 )
             if os.getenv("ALLOW_INSECURE_JWT") != "1":
                 logger.warning(
-                    "JWT_SECRET_KEY is the default 'change-me'. Set JWT_SECRET_KEY for production."
+                    "JWT_SECRET_KEY is insecure (empty or default). "
+                    "Set JWT_SECRET_KEY to a strong value for production."
                 )
         return self
 

@@ -28,8 +28,19 @@ async def create_indexes():
     await db.staff_users.create_index("invite_code", unique=True)
     await db.staff_users.create_index("phone")
     await db.staff_users.create_index("parent_id")
-    await db.staff_registration_applications.create_index("username", unique=True)
-    await db.staff_registration_applications.create_index("phone", unique=True)
+    # Migration note: existing deployments with the old full-unique indexes should drop them before these apply.
+    await db.staff_registration_applications.create_index(
+        "username",
+        unique=True,
+        partialFilterExpression={"status": {"$in": ["pending", "approved"]}},
+        name="uniq_username_active",
+    )
+    await db.staff_registration_applications.create_index(
+        "phone",
+        unique=True,
+        partialFilterExpression={"status": {"$in": ["pending", "approved"]}},
+        name="uniq_phone_active",
+    )
     await db.staff_registration_applications.create_index([("status", 1), ("applied_at", -1)])
     # staff_relations
     await db.staff_relations.create_index(

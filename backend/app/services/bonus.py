@@ -94,6 +94,19 @@ def build_today_tiers(tiers: list[dict], valid_count: int, claims: list[dict]) -
     return items
 
 
+def build_claimed_today_tiers(claims: list[dict]) -> list[dict]:
+    items = []
+    for record in sorted(claims, key=lambda item: int(item.get("tier_threshold", 0))):
+        items.append({
+            "threshold": int(record["tier_threshold"]),
+            "amount": float(record.get("amount", 0.0)),
+            "reached": True,
+            "claimed": True,
+            "claimable": False,
+        })
+    return items
+
+
 async def get_today_bonus_progress(db, staff_id) -> dict:
     date_str, start, end = today_local_str()
     valid_count = await db.claims.count_documents({
@@ -101,24 +114,23 @@ async def get_today_bonus_progress(db, staff_id) -> dict:
         "status": "success",
         "created_at": {"$gte": start, "$lt": end},
     })
+    claims = await list_today_claimed(db, staff_id)
+    total_earned_today = sum(float(record.get("amount", 0)) for record in claims)
     rule = await get_active_rule(db, staff_id)
     if rule is None:
         return {
             "date": date_str,
             "valid_count": valid_count,
             "rule": None,
-            "tiers": [],
-            "total_earned_today": 0.0,
+            "tiers": build_claimed_today_tiers(claims),
+            "total_earned_today": total_earned_today,
         }
-    claims = await db.bonus_claim_records.find(
-        {"staff_id": staff_id, "date": date_str}
-    ).to_list(length=100)
     return {
         "date": date_str,
         "valid_count": valid_count,
         "rule": serialize_today_rule(rule),
         "tiers": build_today_tiers(rule.get("tiers", []), valid_count, claims),
-        "total_earned_today": sum(float(record.get("amount", 0)) for record in claims),
+        "total_earned_today": total_earned_today,
     }
 
 

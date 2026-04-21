@@ -478,19 +478,31 @@ async def complete(
 
     now = datetime.now(timezone.utc)
     outcome = await db.spin_outcomes.find_one_and_update(
-        {"spin_token": spin_token, "status": "pending"},
+        {
+            "spin_token": spin_token,
+            "status": "pending",
+            "staff_id": staff["_id"],
+            "campaign_id": cid,
+            "expires_at": {"$gt": now},
+        },
         {"$set": {"status": "consumed", "consumed_at": now}},
         return_document=ReturnDocument.AFTER,
     )
     if outcome is None:
+        existing = await db.spin_outcomes.find_one({"spin_token": spin_token})
+        if existing is None:
+            raise HTTPException(status_code=400, detail="spin_token_invalid")
+        if existing.get("status") != "pending":
+            raise HTTPException(status_code=400, detail="spin_token_invalid_or_consumed")
+        exp = existing.get("expires_at")
+        if exp is not None:
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp <= now:
+                raise HTTPException(status_code=400, detail="spin_token_expired")
+        if existing.get("staff_id") != staff["_id"] or existing.get("campaign_id") != cid:
+            raise HTTPException(status_code=400, detail="spin_token_mismatch")
         raise HTTPException(status_code=400, detail="spin_token_invalid_or_consumed")
-    exp = outcome["expires_at"]
-    if exp.tzinfo is None:
-        exp = exp.replace(tzinfo=timezone.utc)
-    if exp <= now:
-        raise HTTPException(status_code=400, detail="spin_token_expired")
-    if outcome["staff_id"] != staff["_id"] or outcome["campaign_id"] != cid:
-        raise HTTPException(status_code=400, detail="spin_token_mismatch")
     if outcome["no_prize"]:
         return {
             "success": True,
