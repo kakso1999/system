@@ -121,6 +121,9 @@ async def create_indexes():
     await db.daily_bonus_settlements.create_index(
         [("staff_id", 1), ("date", 1)], unique=True
     )
+    # sponsors
+    await db.sponsors.create_index("enabled")
+    await db.sponsors.create_index([("sort_order", 1), ("created_at", -1)])
 
 
 def get_db() -> AsyncIOMotorDatabase:
