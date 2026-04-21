@@ -191,3 +191,19 @@ if os.getenv("ALLOW_INSECURE_JWT") != "1":
 
 ## Auditor Notes
 This pass stayed intentionally narrow: I verified the seven previously "Fixed" items with targeted grep-based inspection, then concentrated the remaining time on the newly landed F/G/H code paths where auth, state transitions, and data consistency could fail silently. I stopped after the highest-signal issues rather than broadening into low-value style or completeness checks.
+
+## Resolution Status (2026-04-21)
+
+| ID | Severity | Status | Notes |
+|----|----------|--------|-------|
+| C1 (concern) | Critical | **Fixed** | staff_id/campaign_id/expires_at moved into atomic find_one_and_update filter in `/complete`; diagnostics differentiate invalid/consumed/expired/mismatched without burning pending records |
+| C4 (concern) | Critical | **Fixed** | Empty / whitespace-only `JWT_SECRET_KEY` now treated as insecure alongside literal `"change-me"` |
+| H1 | High | **Fixed** | Admin bonus router now requires `get_super_admin` |
+| H2 | High | **Fixed** | `claims.cancel` is a compare-and-set on `{pending_redeem, unpaid, frozen}`; terminal states → 400 `invalid_transition` |
+| H3 | High | **Fixed** | `finance.manual_settle` snapshots approved commission_logs, verifies modified counts, rolls claims back if log commit fails |
+| M1 | Medium | **Fixed** | `staff_registration_applications` uses partial unique indexes on `username`/`phone` (only when status ∈ {pending, approved}) so rejected applicants can reapply |
+| M2 | Medium | **Fixed** | `registrations.approve` atomically claims pending → approving first, then does side effects, releases on failure |
+| M3 | Medium | **Fixed** | `get_today_bonus_progress` now reports `total_earned_today` and claimed tier entries even when the rule is disabled mid-day |
+| M4 | Medium | **Fixed** | Zero-commission claims are included in `manual_settle` and advance `unpaid → paid` |
+| I1 | Info | **Fixed** | `backend/.env.example` documents `PRODUCTION`, `ALLOW_INSECURE_JWT`, and the `external_api_key` rotation requirement |
+
