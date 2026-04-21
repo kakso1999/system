@@ -103,15 +103,22 @@ async def cancel_claim(
     reason = str(payload.get("reason", "")).strip()
     if not reason:
         raise HTTPException(status_code=400, detail="Cancel reason is required")
+    allowed_sources = ["pending_redeem", "unpaid", "frozen"]
     updated = await db.claims.find_one_and_update(
-        {"_id": oid},
+        {"_id": oid, "settlement_status": {"$in": allowed_sources}},
         {"$set": {"settlement_status": "cancelled", "cancelled_at": datetime.now(timezone.utc), "cancel_reason": reason}},
         return_document=ReturnDocument.AFTER,
     )
-    await db.commission_logs.update_many(
-        {"claim_id": oid},
-        {"$set": {"status": "cancelled", "cancelled_at": datetime.now(timezone.utc), "cancel_reason": reason}},
-    )
+    if updated is None:
+        existing = await db.claims.find_one({"_id": oid})
+        if existing is None:
+            raise HTTPException(status_code=404, detail="claim_not_found")
+        raise HTTPException(status_code=400, detail="invalid_transition")
+    if updated is not None:
+        await db.commission_logs.update_many(
+            {"claim_id": oid, "status": {"$in": ["pending", "approved"]}},
+            {"$set": {"status": "cancelled", "cancelled_at": datetime.now(timezone.utc), "cancel_reason": reason}},
+        )
     await log_finance_action(
         db,
         admin=admin,
