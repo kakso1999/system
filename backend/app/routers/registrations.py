@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from app.database import get_db
@@ -133,46 +134,55 @@ async def approve_registration(
     current_admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> RegistrationApplicationResponse:
-    application = await get_application_or_404(db, application_id)
-    if application.get("status") != "pending":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="not_pending")
-    if await db.staff_users.find_one({"username": application["username"]}, {"_id": 1}):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
-    if await db.staff_users.find_one({"phone": application["phone"]}, {"_id": 1}):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Phone already exists")
-    parent = await resolve_referrer_staff(db, application.get("invite_code"))
-    if application.get("invite_code") and not parent:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="referrer_missing")
+    application_id_oid = parse_object_id(application_id, "application_id")
     now = datetime.now(timezone.utc)
-    staff_document = build_approved_staff_document(
-        application,
-        parent,
-        await generate_invite_code(db),
-        generate_staff_no(),
-        now,
+    claimed = await db.staff_registration_applications.find_one_and_update(
+        {"_id": application_id_oid, "status": "pending"},
+        {"$set": {"status": "approving", "reviewed_at": now, "reviewed_by_admin_id": current_admin["_id"]}},
+        return_document=ReturnDocument.AFTER,
     )
+    if claimed is None:
+        existing = await db.staff_registration_applications.find_one({"_id": application_id_oid})
+        if existing is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="application_not_found")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="not_pending")
+    application = claimed
+    parent = None
     try:
+        if await db.staff_users.find_one({"username": application["username"]}, {"_id": 1}):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
+        if await db.staff_users.find_one({"phone": application["phone"]}, {"_id": 1}):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Phone already exists")
+        parent = await resolve_referrer_staff(db, application.get("invite_code"))
+        if application.get("invite_code") and not parent:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="referrer_missing")
+        staff_document = build_approved_staff_document(
+            application,
+            parent,
+            await generate_invite_code(db),
+            generate_staff_no(),
+            now,
+        )
         result = await db.staff_users.insert_one(staff_document)
         await create_relation_records(db, result.inserted_id, staff_document["parent_id"], now)
+        updated = await db.staff_registration_applications.find_one_and_update(
+            {"_id": application["_id"]},
+            {"$set": {"status": "approved", "approved_staff_id": result.inserted_id, "rejection_reason": ""}},
+            return_document=ReturnDocument.AFTER,
+        )
+        application = updated or application
     except (DuplicateKeyError, Exception) as exc:
+        await db.staff_registration_applications.update_one(
+            {"_id": application["_id"], "status": "approving"},
+            {"$set": {"status": "pending"}, "$unset": {"reviewed_at": "", "reviewed_by_admin_id": ""}},
+        )
         logger.exception("Failed to approve registration application %s", application_id)
         if isinstance(exc, DuplicateKeyError):
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username, phone, or invite code already exists") from exc
+        if isinstance(exc, HTTPException):
+            raise exc
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to approve registration") from exc
-    await db.staff_registration_applications.update_one(
-        {"_id": application["_id"]},
-        {
-            "$set": {
-                "status": "approved",
-                "approved_staff_id": result.inserted_id,
-                "reviewed_at": now,
-                "reviewed_by_admin_id": current_admin["_id"],
-                "rejection_reason": "",
-            }
-        },
-    )
-    updated = await db.staff_registration_applications.find_one({"_id": application["_id"]})
-    return serialize_application(updated, parent)
+    return serialize_application(application, parent)
 
 
 @router.post("/{application_id}/reject", response_model=RegistrationApplicationResponse)

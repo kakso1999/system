@@ -109,8 +109,8 @@ async def manual_settle(
         amount = float(payload["amount"])
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid amount") from exc
-    if not math.isfinite(amount) or amount <= 0:
-        raise HTTPException(status_code=400, detail="Settlement amount must be greater than 0")
+    if not math.isfinite(amount) or amount < 0:
+        raise HTTPException(status_code=400, detail="Settlement amount must be greater than or equal to 0")
     remark = payload.get("remark", "")
     staff = await db.staff_users.find_one({"_id": staff_id})
     if not staff:
@@ -124,8 +124,6 @@ async def manual_settle(
     settled_amount = 0.0
     for claim in claims:
         claim_amount = await claim_commission_amount(db, claim)
-        if claim_amount <= 0:
-            continue
         settle_claim_ids.append(claim["_id"])
         settled_amount += claim_amount
 
@@ -137,16 +135,31 @@ async def manual_settle(
         raise HTTPException(status_code=400, detail="No approved commission records to settle")
 
     now = datetime.now(timezone.utc)
+    approved_logs = await db.commission_logs.find(
+        {"claim_id": {"$in": settle_claim_ids}, "status": "approved"},
+        {"_id": 1},
+    ).to_list(length=None)
+    expected_log_ids = [log["_id"] for log in approved_logs]
     claim_update_result = await db.claims.update_many(
         {"_id": {"$in": settle_claim_ids}, **unpaid_settlement_filter()},
         {"$set": {"settlement_status": "paid", "settled_at": now}},
     )
     if claim_update_result.modified_count != len(settle_claim_ids):
         raise HTTPException(status_code=409, detail="Settlement conflict, please retry")
-    await db.commission_logs.update_many(
-        {"claim_id": {"$in": settle_claim_ids}, "status": "approved"},
-        {"$set": {"status": "paid", "paid_at": now, "settled_by": admin.get("username", "admin")}},
-    )
+    try:
+        if expected_log_ids:
+            log_update_result = await db.commission_logs.update_many(
+                {"_id": {"$in": expected_log_ids}, "status": "approved"},
+                {"$set": {"status": "paid", "paid_at": now, "settled_by": admin.get("username", "admin")}},
+            )
+            if log_update_result.modified_count != len(expected_log_ids):
+                raise RuntimeError("commission_logs modified count mismatch")
+    except Exception as exc:
+        await db.claims.update_many(
+            {"_id": {"$in": settle_claim_ids}, "settlement_status": "paid", "settled_at": now},
+            {"$set": {"settlement_status": "unpaid"}, "$unset": {"settled_at": ""}},
+        )
+        raise HTTPException(status_code=500, detail="Settlement commit failed; rolled back") from exc
 
     await log_finance_action(
         db,
