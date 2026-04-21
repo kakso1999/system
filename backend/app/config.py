@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     DEFAULT_ADMIN_PASSWORD: str = "admin123"
     SMS_ENABLED: bool = False
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3006"
+    TRUSTED_PROXY_IPS: str = "127.0.0.1,::1"
     REPORT_TIMEZONE: str = "Asia/Manila"
 
     @model_validator(mode="after")
