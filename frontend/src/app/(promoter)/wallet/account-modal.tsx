@@ -1,6 +1,6 @@
-import type { Dispatch, FormEvent, SetStateAction } from "react";
+import { useEffect, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import type { PayoutAccount } from "@/types";
-import type { AccountForm } from "./wallet-shared";
+import { USDT_NETWORKS, type AccountForm } from "./wallet-shared";
 
 interface AccountModalProps {
   editing: PayoutAccount | null;
@@ -13,6 +13,18 @@ interface AccountModalProps {
 
 export default function AccountModal(props: AccountModalProps) {
   const { editing, form, setForm, submitting, onClose, onSubmit } = props;
+  const labelsFor = (type: PayoutAccount["type"]) => {
+    if (type === "usdt") return { accountName: "Wallet Label", accountNumber: "Wallet Address" };
+    if (type === "bank") return { accountName: "Account Name", accountNumber: "Account Number" };
+    return { accountName: "Account Name", accountNumber: "Phone / Account Number" };
+  };
+  const labels = labelsFor(form.type);
+
+  useEffect(() => {
+    if (form.type !== "usdt") return;
+    if (USDT_NETWORKS.includes(form.bank_name as typeof USDT_NETWORKS[number])) return;
+    setForm((prev) => ({ ...prev, bank_name: USDT_NETWORKS[0] }));
+  }, [form.type, form.bank_name, setForm]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-inverse-surface/40 backdrop-blur-sm px-4">
@@ -23,7 +35,11 @@ export default function AccountModal(props: AccountModalProps) {
         <form onSubmit={onSubmit} className="space-y-4">
           <select
             value={form.type}
-            onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value as PayoutAccount["type"] }))}
+            onChange={(e) => setForm((prev) => ({
+              ...prev,
+              type: e.target.value as PayoutAccount["type"],
+              bank_name: e.target.value === "usdt" && !USDT_NETWORKS.includes(prev.bank_name as typeof USDT_NETWORKS[number]) ? USDT_NETWORKS[0] : prev.bank_name,
+            }))}
             className="w-full bg-surface-container-low border-none rounded-xl py-3 px-4 text-sm"
           >
             <option value="gcash">GCash</option>
@@ -34,15 +50,30 @@ export default function AccountModal(props: AccountModalProps) {
           </select>
           <input
             type="text"
-            placeholder="Account Name"
+            placeholder={labels.accountName}
             value={form.account_name}
             onChange={(e) => setForm((prev) => ({ ...prev, account_name: e.target.value }))}
             className="w-full bg-surface-container-low border-none rounded-xl py-3 px-4 text-sm"
-            required
+            required={form.type !== "usdt"}
           />
+          {form.type === "usdt" && (
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-on-surface-variant">Network</span>
+              <select
+                value={form.bank_name || USDT_NETWORKS[0]}
+                onChange={(e) => setForm((prev) => ({ ...prev, bank_name: e.target.value }))}
+                className="w-full bg-surface-container-low border-none rounded-xl py-3 px-4 text-sm"
+                required
+              >
+                {USDT_NETWORKS.map((network) => (
+                  <option key={network} value={network}>{network}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <input
             type="text"
-            placeholder="Account Number"
+            placeholder={labels.accountNumber}
             value={form.account_number}
             onChange={(e) => setForm((prev) => ({ ...prev, account_number: e.target.value }))}
             className="w-full bg-surface-container-low border-none rounded-xl py-3 px-4 text-sm"
