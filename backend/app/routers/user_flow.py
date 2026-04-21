@@ -619,6 +619,7 @@ async def complete(
         "reward_code_id": reward_code_id, "reward_code": reward_code,
         "settlement_status": "pending_redeem" if item["type"] == "website" else "unpaid",
         "commission_amount": 0.0,
+        "commission_amount_cents": 0,
         "settled_at": None,
         "redirected": False, "status": "success", "risk_hit": [],
         "created_at": datetime.now(timezone.utc),
@@ -683,6 +684,18 @@ async def pin_verify(payload: dict, request: Request, db: AsyncIOMotorDatabase =
     staff = await db.staff_users.find_one({"invite_code": staff_code})
     if not staff:
         return {"success": False, "error": "not_found", "attempts_remaining": 0}
+
+    staff_status = staff.get("status", "active")
+    work_status = staff.get("work_status", "stopped")
+    promotion_paused = bool(staff.get("promotion_paused", False))
+    risk_frozen = bool(staff.get("risk_frozen", False))
+    if (
+        staff_status != "active"
+        or work_status != "promoting"
+        or promotion_paused
+        or risk_frozen
+    ):
+        return {"success": False, "error": "staff_inactive", "attempts_remaining": 0}
 
     token = await db.promo_live_tokens.find_one({
         "token_signature": signature, "staff_id": staff["_id"], "status": "active",

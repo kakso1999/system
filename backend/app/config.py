@@ -30,19 +30,29 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_secrets(self):
+        allow_insecure = os.getenv("ALLOW_INSECURE_JWT") == "1"
+
         key = (self.JWT_SECRET_KEY or "").strip()
-        insecure = (not key) or (self.JWT_SECRET_KEY == "change-me")
-        if insecure:
-            if os.getenv("PRODUCTION") == "1":
-                raise RuntimeError(
-                    "Refusing to start: insecure JWT_SECRET_KEY in production. "
-                    "Set a non-empty, non-default JWT_SECRET_KEY env var."
-                )
-            if os.getenv("ALLOW_INSECURE_JWT") != "1":
-                logger.warning(
-                    "JWT_SECRET_KEY is insecure (empty or default). "
-                    "Set JWT_SECRET_KEY to a strong value for production."
-                )
+        jwt_insecure = (not key) or (self.JWT_SECRET_KEY == "change-me")
+        if jwt_insecure:
+            msg = (
+                "Refusing to start: insecure JWT_SECRET_KEY (empty or default 'change-me'). "
+                "Set a strong JWT_SECRET_KEY env var, or set ALLOW_INSECURE_JWT=1 for local dev."
+            )
+            if not allow_insecure:
+                raise RuntimeError(msg)
+            logger.warning("ALLOW_INSECURE_JWT=1: booting with insecure JWT_SECRET_KEY (dev only).")
+
+        admin_pwd = (self.DEFAULT_ADMIN_PASSWORD or "").strip()
+        admin_insecure = (not admin_pwd) or admin_pwd == "admin123"
+        if admin_insecure:
+            msg = (
+                "Refusing to start: insecure DEFAULT_ADMIN_PASSWORD (empty or default 'admin123'). "
+                "Set a strong DEFAULT_ADMIN_PASSWORD env var, or set ALLOW_INSECURE_JWT=1 for local dev."
+            )
+            if not allow_insecure:
+                raise RuntimeError(msg)
+            logger.warning("ALLOW_INSECURE_JWT=1: seeding default admin with insecure password (dev only).")
         return self
 
     @property

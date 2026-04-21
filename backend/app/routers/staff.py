@@ -274,10 +274,16 @@ async def update_staff_status(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
     staff = await get_staff_or_404(db, staff_id)
+    now = datetime.now(timezone.utc)
     await db.staff_users.update_one(
         {"_id": staff["_id"]},
-        {"$set": {"status": payload.status, "updated_at": datetime.now(timezone.utc)}},
+        {"$set": {"status": payload.status, "updated_at": now}},
     )
+    if payload.status != "active":
+        await db.promo_live_tokens.update_many(
+            {"staff_id": staff["_id"], "status": "active"},
+            {"$set": {"status": "expired", "expired_at": now, "expired_reason": "staff_status_change"}},
+        )
     return MessageResponse(message="Staff status updated successfully")
 
 
