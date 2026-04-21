@@ -12,6 +12,7 @@ from app.dependencies import get_current_admin
 from app.schemas.campaign import WheelItemCreateRequest, WheelItemDetail, WheelItemUpdateRequest
 from app.schemas.common import MessageResponse
 from app.utils.helpers import to_str_id
+from app.utils.image_upload import validate_image_upload
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
 
@@ -120,11 +121,11 @@ async def upload_wheel_image(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     item = await get_wheel_item_or_404(db, item_id)
-    ext = file.filename.rsplit(".", 1)[-1] if file.filename else "png"
-    filename = f"wheel_{uuid.uuid4().hex[:8]}.{ext}"
-    filepath = UPLOAD_DIR / filename
-    UPLOAD_DIR.mkdir(exist_ok=True)
     content = await file.read()
+    ext = validate_image_upload(content)
+    filename = f"wheel_{uuid.uuid4().hex[:8]}.{ext}"
+    UPLOAD_DIR.mkdir(exist_ok=True)
+    filepath = UPLOAD_DIR / filename
     filepath.write_bytes(content)
     image_url = f"/uploads/{filename}"
     await db.wheel_items.update_one(

@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, LockKeyhole } from "lucide-react";
 import api from "@/lib/api";
 import { getPublicSettings, type PublicSettings } from "@/lib/public-settings";
+import { writeSessionToken } from "@/lib/session-token";
 
 type PinError = "invalid_pin" | "expired" | "locked" | "not_found" | "rate_limited";
 
@@ -251,7 +252,8 @@ export default function PinPage() {
         token_signature: lt,
       });
       if (res.data.success && res.data.session_token) {
-        router.replace(`/welcome/${code}?session_token=${encodeURIComponent(res.data.session_token)}`);
+        writeSessionToken(code, res.data.session_token);
+        router.replace(`/welcome/${code}`);
         return;
       }
       setError(getErrorMessage(res.data.error, res.data.attempts_remaining));

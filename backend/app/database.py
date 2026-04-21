@@ -87,6 +87,13 @@ async def create_indexes():
     # otp_records - TTL index
     await db.otp_records.create_index("expires_at", expireAfterSeconds=0)
     await db.otp_records.create_index([("phone", 1), ("expires_at", 1)])
+    # otp_reservations - TTL index for M4 atomic reservation cleanup
+    await db.otp_reservations.create_index("expires_at", expireAfterSeconds=0)
+    await db.otp_reservations.create_index(
+        [("phone", 1), ("bucket", 1)],
+        unique=True,
+        name="uniq_phone_bucket",
+    )
     # risk_logs
     await db.risk_logs.create_index([("created_at", -1)])
     # system_settings

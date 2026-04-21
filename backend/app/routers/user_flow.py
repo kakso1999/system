@@ -192,11 +192,9 @@ async def create_generated_reward_code(db, *, campaign_id, wheel_item_id, staff_
 async def welcome(
     staff_code: str,
     request: Request,
-    session_token: str | None = None,
     session_token_header: str | None = Header(None, alias="X-Session-Token"),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    effective_session_token = session_token_header or session_token
     staff = await db.staff_users.find_one({"invite_code": staff_code.upper()})
     if not staff:
         raise HTTPException(status_code=404, detail="Promoter not found")
@@ -206,7 +204,7 @@ async def welcome(
     if not campaign:
         raise HTTPException(status_code=404, detail="No active campaign")
     if await get_setting(db, "live_qr_enabled"):
-        await _require_active_session(db, effective_session_token, staff["_id"], campaign_oid=campaign["_id"])
+        await _require_active_session(db, session_token_header, staff["_id"], campaign_oid=campaign["_id"])
 
     await db.staff_users.update_one({"_id": staff["_id"]}, {"$inc": {"stats.total_scans": 1}})
     await db.scan_logs.insert_one({
