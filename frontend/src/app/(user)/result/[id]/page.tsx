@@ -89,11 +89,9 @@ export default function ResultPage() {
       ctx.font = "22px Arial, sans-serif";
       ctx.fillText("Show this code at the shop to redeem.", canvas.width / 2, 460);
 
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(
-        `${window.location.origin}/mock-redeem?code=${data.reward_code}`
-      )}`;
+      const qrPayload = `${window.location.origin}/mock-redeem?code=${data.reward_code}`;
+      const qrUrl = `/api/public/qr?size=320&data=${encodeURIComponent(qrPayload)}`;
       const qrImage = new Image();
-      qrImage.crossOrigin = "anonymous";
       await new Promise<void>((resolve, reject) => {
         qrImage.onload = () => resolve();
         qrImage.onerror = () => reject(new Error("QR load failed"));
