@@ -149,7 +149,10 @@ export default function WalletPage() {
                     <div>
                       <p className="font-bold">{account.account_name}</p>
                       <p className="text-xs text-on-surface-variant">
-                        {accountTypeLabels[account.type]} - {maskNumber(account.account_number)}
+                        {accountTypeLabels[account.type]}
+                        {account.type === "usdt" && account.bank_name ? ` (${account.bank_name})` : ""}
+                        {" - "}
+                        {maskNumber(account.account_number)}
                       </p>
                     </div>
                   </div>

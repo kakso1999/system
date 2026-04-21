@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
-import type { CommissionLog, PageResponse } from "@/types";
+import { copyToClipboard } from "@/lib/clipboard";
+import type { CommissionLog, PageResponse, PayoutAccount } from "@/types";
+import { accountTypeLabels } from "../wallet/wallet-shared";
 
 type CommissionFilter = "all" | "1" | "2" | "3" | "team_reward";
 
@@ -73,6 +75,7 @@ export default function CommissionPage() {
   const [activeFilter, setActiveFilter] = useState<CommissionFilter>("all");
   const [records, setRecords] = useState<CommissionRecord[]>([]);
   const [summary, setSummary] = useState<CommissionSummary>({ total_earned: 0, pending: 0, approved: 0, paid: 0 });
+  const [defaultAccount, setDefaultAccount] = useState<PayoutAccount | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -103,9 +106,33 @@ export default function CommissionPage() {
     }
   }, [activeFilter, page]);
 
+  const loadDefaultAccount = useCallback(async () => {
+    try {
+      const res = await api.get<PayoutAccount[] | PageResponse<PayoutAccount>>("/api/promoter/payout-accounts");
+      const accounts = Array.isArray(res.data) ? res.data : (res.data.items || []);
+      setDefaultAccount(accounts.find((account) => account.is_default) || null);
+    } catch {
+      setDefaultAccount(null);
+    }
+  }, []);
+
   useEffect(() => { loadCommissions(); }, [loadCommissions]);
+  useEffect(() => { loadDefaultAccount(); }, [loadDefaultAccount]);
 
   const totalPages = Math.max(1, Math.ceil(total / 10));
+  const defaultAccountLine = defaultAccount
+    ? defaultAccount.type === "bank"
+      ? `Bank: ${defaultAccount.bank_name} · ${defaultAccount.account_name} · ${defaultAccount.account_number}`
+      : defaultAccount.type === "usdt"
+        ? `USDT (${defaultAccount.bank_name}): ${defaultAccount.account_number}`
+        : `${accountTypeLabels[defaultAccount.type]}: ${defaultAccount.account_name} · ${defaultAccount.account_number}`
+    : "No default payout account set.";
+
+  const copyDefaultAccount = async () => {
+    if (!defaultAccount) return;
+    await copyToClipboard(defaultAccountLine);
+    alert("Copied!");
+  };
 
   return (
     <div className="mx-auto max-w-lg px-4 pt-8 pb-8 space-y-5">
@@ -116,8 +143,9 @@ export default function CommissionPage() {
 
       <section className="grid grid-cols-2 gap-3">
         <article className="bg-surface-container-lowest rounded-xl p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wider font-bold text-on-surface-variant">Total Earned</p>
+          <p className="text-xs uppercase tracking-wider font-bold text-on-surface-variant">Total (incl. Bonus)</p>
           <p className="text-xl font-extrabold font-[var(--font-headline)] mt-2 text-primary">{toPoints(summary.total_earned)}</p>
+          <p className="mt-1 text-xs text-on-surface-variant">Commission + Bonus</p>
         </article>
         <article className="bg-surface-container-lowest rounded-xl p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wider font-bold text-on-surface-variant">Pending</p>
@@ -131,6 +159,22 @@ export default function CommissionPage() {
           <p className="text-xs uppercase tracking-wider font-bold text-on-surface-variant">Paid</p>
           <p className="text-xl font-extrabold font-[var(--font-headline)] mt-2 text-primary">{toPoints(summary.paid)}</p>
         </article>
+      </section>
+
+      <section className="bg-surface-container-lowest rounded-xl p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-wider font-bold text-on-surface-variant">Default Payout Account</p>
+            <p className="text-sm font-bold mt-1">{defaultAccountLine}</p>
+          </div>
+          <button
+            onClick={copyDefaultAccount}
+            disabled={!defaultAccount}
+            className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-on-primary disabled:opacity-40"
+          >
+            Copy
+          </button>
+        </div>
       </section>
 
       <section className="bg-surface-container-lowest rounded-xl p-2 shadow-sm">

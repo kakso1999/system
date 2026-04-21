@@ -23,6 +23,9 @@ export type AccountForm = {
   bank_name: string;
 };
 
+export const USDT_NETWORKS = ["TRC20", "ERC20", "BEP20", "Polygon"] as const;
+export type UsdtNetwork = typeof USDT_NETWORKS[number];
+
 export const emptyForm: AccountForm = {
   type: "gcash",
   account_name: "",
