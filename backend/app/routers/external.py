@@ -61,4 +61,26 @@ async def redeem_reward_code(
         {"reward_code_id": rc["_id"], "settlement_status": "pending_redeem"},
         {"$set": {"settlement_status": "unpaid"}},
     )
+    claim_doc = await db.claims.find_one({"reward_code_id": rc["_id"]}, {"_id": 1})
+    if claim_doc:
+        pending_logs = await db.commission_logs.find(
+            {"claim_id": claim_doc["_id"], "status": "pending_redeem"},
+            {"_id": 1, "beneficiary_staff_id": 1, "amount_cents": 1, "amount": 1},
+        ).to_list(length=None)
+        if pending_logs:
+            await db.commission_logs.update_many(
+                {"claim_id": claim_doc["_id"], "status": "pending_redeem"},
+                {"$set": {"status": "approved", "approved_at": now}},
+            )
+            for log in pending_logs:
+                cents = int(log.get("amount_cents") or 0)
+                if cents <= 0:
+                    continue
+                await db.staff_users.update_one(
+                    {"_id": log["beneficiary_staff_id"]},
+                    {"$inc": {
+                        "stats.total_commission": cents / 100.0,
+                        "stats.total_commission_cents": cents,
+                    }},
+                )
     return {"success": True, "message": "Reward code redeemed successfully"}
