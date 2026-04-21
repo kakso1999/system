@@ -1,6 +1,7 @@
 from datetime import datetime
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class SponsorBase(BaseModel):
@@ -9,6 +10,34 @@ class SponsorBase(BaseModel):
     link_url: str = Field(default="", max_length=500)
     enabled: bool = True
     sort_order: int = 0
+
+    @field_validator("logo_url")
+    @classmethod
+    def _validate_logo_url(cls, v: str) -> str:
+        if not v:
+            return ""
+        v = v.strip()
+        if v.startswith("/uploads/"):
+            return v
+        parsed = urlparse(v)
+        if parsed.scheme.lower() not in {"http", "https"}:
+            raise ValueError("logo_url scheme must be http or https")
+        if not parsed.netloc:
+            raise ValueError("logo_url must include a host")
+        return v
+
+    @field_validator("link_url")
+    @classmethod
+    def _validate_link_url(cls, v: str) -> str:
+        if not v:
+            return ""
+        v = v.strip()
+        parsed = urlparse(v)
+        if parsed.scheme.lower() not in {"http", "https"}:
+            raise ValueError("link_url scheme must be http or https")
+        if not parsed.netloc:
+            raise ValueError("link_url must include a host")
+        return v
 
 
 class SponsorCreateRequest(SponsorBase):
@@ -21,6 +50,38 @@ class SponsorUpdateRequest(BaseModel):
     link_url: str | None = Field(default=None, max_length=500)
     enabled: bool | None = None
     sort_order: int | None = None
+
+    @field_validator("logo_url")
+    @classmethod
+    def _validate_logo_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if not v:
+            return ""
+        v = v.strip()
+        if v.startswith("/uploads/"):
+            return v
+        parsed = urlparse(v)
+        if parsed.scheme.lower() not in {"http", "https"}:
+            raise ValueError("logo_url scheme must be http or https")
+        if not parsed.netloc:
+            raise ValueError("logo_url must include a host")
+        return v
+
+    @field_validator("link_url")
+    @classmethod
+    def _validate_link_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if not v:
+            return ""
+        v = v.strip()
+        parsed = urlparse(v)
+        if parsed.scheme.lower() not in {"http", "https"}:
+            raise ValueError("link_url scheme must be http or https")
+        if not parsed.netloc:
+            raise ValueError("link_url must include a host")
+        return v
 
 
 class SponsorDetail(SponsorBase):
