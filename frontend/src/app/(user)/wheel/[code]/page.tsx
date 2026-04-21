@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, ArrowLeft, ChevronDown, PartyPopper } from "lucide-react";
 import api from "@/lib/api";
+import { getPublicSettings, type PublicSettings } from "@/lib/public-settings";
 import { readSessionToken, writeSessionToken } from "@/lib/session-token";
 import SponsorsCarousel from "@/components/sponsors-carousel";
 import { ClaimResultCard } from "./claim-result";
@@ -65,6 +66,7 @@ export default function WheelPage() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const token = sessionToken ?? readSessionToken(code) ?? searchParams.get("session_token");
   const [items, setItems] = useState<WheelItemData[]>([]);
+  const [publicSettings, setPublicSettings] = useState<PublicSettings | null>(null);
   const [campaignId, setCampaignId] = useState("");
   const [noPrizeWeight, setNoPrizeWeight] = useState(10);
   const [spinning, setSpinning] = useState(false);
@@ -97,6 +99,13 @@ export default function WheelPage() {
       setSessionToken(readSessionToken(code));
     }
   }, [code, searchParams, router]);
+  useEffect(() => {
+    let active = true;
+    getPublicSettings().then((settings) => {
+      if (active) setPublicSettings(settings);
+    });
+    return () => { active = false; };
+  }, []);
   useEffect(() => { setDeviceFp(generateDeviceFingerprint()); }, []);
   useEffect(() => {
     if (!code) return;
@@ -257,7 +266,7 @@ export default function WheelPage() {
       <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
         <div className="flex justify-between items-center px-6 h-16 max-w-7xl mx-auto">
           <button onClick={() => router.back()} className="p-2 rounded-full hover:bg-primary/5"><ArrowLeft className="w-5 h-5 text-primary" /></button>
-          <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">GroundRewards</h1>
+          <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">{publicSettings?.project_name || "GroundRewards"}</h1>
           <div className="w-10" />
         </div>
       </header>

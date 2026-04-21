@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, ChevronRight, Gift, Star, Sparkles } from "lucide-react";
 import confetti from "canvas-confetti";
 import api, { resolveApiUrl } from "@/lib/api";
+import { getPublicSettings, type PublicSettings } from "@/lib/public-settings";
 import { readSessionToken, writeSessionToken } from "@/lib/session-token";
 
 interface WheelItemData {
@@ -38,6 +39,7 @@ export default function WelcomePage() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const token = sessionToken ?? readSessionToken(code) ?? searchParams.get("session_token");
   const [data, setData] = useState<WelcomeData | null>(null);
+  const [publicSettings, setPublicSettings] = useState<PublicSettings | null>(null);
   const [error, setError] = useState("");
   const [step, setStep] = useState<Step>("welcome");
   const [activeSlide, setActiveSlide] = useState(0);
@@ -54,6 +56,14 @@ export default function WelcomePage() {
       setSessionToken(readSessionToken(code));
     }
   }, [code, searchParams, router]);
+
+  useEffect(() => {
+    let active = true;
+    getPublicSettings().then((settings) => {
+      if (active) setPublicSettings(settings);
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (!code) return;
@@ -104,7 +114,7 @@ export default function WelcomePage() {
       <div className="min-h-screen bg-surface flex flex-col">
         <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
           <div className="flex justify-center items-center h-16">
-            <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">GroundRewards</h1>
+            <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">{publicSettings?.project_name || "GroundRewards"}</h1>
           </div>
         </header>
 
@@ -132,7 +142,7 @@ export default function WelcomePage() {
           </h2>
 
           <p className="text-on-surface-variant text-center max-w-sm leading-relaxed mb-10">
-            {data.campaign.description || "You've been invited to an exclusive prize draw. Amazing rewards await!"}
+            {data.campaign.description || publicSettings?.activity_desc || "You've been invited to an exclusive prize draw. Amazing rewards await!"}
           </p>
 
           <button
@@ -159,7 +169,7 @@ export default function WelcomePage() {
       <div className="min-h-screen bg-surface flex flex-col">
         <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
           <div className="flex justify-center items-center h-16">
-            <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">GroundRewards</h1>
+            <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">{publicSettings?.project_name || "GroundRewards"}</h1>
           </div>
         </header>
 

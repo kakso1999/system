@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { AlertCircle, CheckCircle, XCircle, Gift, Star } from "lucide-react";
 import api from "@/lib/api";
 import { copyToClipboard } from "@/lib/clipboard";
+import { getPublicSettings, type PublicSettings } from "@/lib/public-settings";
 
 interface ClaimResult {
   id: string;
@@ -22,8 +23,17 @@ export default function ResultPage() {
   const params = useParams();
   const claimId = params.id as string;
   const [data, setData] = useState<ClaimResult | null>(null);
+  const [publicSettings, setPublicSettings] = useState<PublicSettings | null>(null);
   const [error, setError] = useState("");
   const [downloading, setDownloading] = useState<boolean>(false);
+
+  useEffect(() => {
+    let active = true;
+    getPublicSettings().then((settings) => {
+      if (active) setPublicSettings(settings);
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (claimId) loadResult();
@@ -130,7 +140,7 @@ export default function ResultPage() {
     <div className="min-h-screen bg-surface">
       <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
         <div className="flex justify-center items-center h-16">
-          <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">GroundRewards</h1>
+          <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">{publicSettings?.project_name || "GroundRewards"}</h1>
         </div>
       </header>
 

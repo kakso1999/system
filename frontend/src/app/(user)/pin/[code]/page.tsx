@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, LockKeyhole } from "lucide-react";
 import api from "@/lib/api";
+import { getPublicSettings, type PublicSettings } from "@/lib/public-settings";
 
 type PinError = "invalid_pin" | "expired" | "locked" | "not_found" | "rate_limited";
 
@@ -98,11 +99,11 @@ function PinBox({
   );
 }
 
-function PinHeader() {
+function PinHeader({ projectName }: { projectName?: string | null }) {
   return (
     <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
       <div className="flex justify-center items-center h-16">
-        <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">GroundRewards</h1>
+        <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">{projectName || "GroundRewards"}</h1>
       </div>
     </header>
   );
@@ -188,10 +189,19 @@ export default function PinPage() {
   const qrVersion = searchParams.get("v") || "";
   const [pin, setPin] = useState(["", "", ""]);
   const [deviceFp, setDeviceFp] = useState("");
+  const [publicSettings, setPublicSettings] = useState<PublicSettings | null>(null);
   const [error, setError] = useState("");
   const [locked, setLocked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const firstInputFocused = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    getPublicSettings().then((settings) => {
+      if (active) setPublicSettings(settings);
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     setDeviceFp(generateDeviceFingerprint());
@@ -259,7 +269,7 @@ export default function PinPage() {
 
   return (
     <div className="min-h-screen bg-surface flex flex-col">
-      <PinHeader />
+      <PinHeader projectName={publicSettings?.project_name} />
       <main className="flex-1 flex flex-col items-center justify-center px-6 pt-24 pb-12">
         <PinHero qrVersion={qrVersion} />
         <PinGrid pin={pin} disabled={disabled} onDigit={setDigit} onBack={clearOrMoveBack} />

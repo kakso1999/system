@@ -1,14 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { copyToClipboard } from "@/lib/clipboard";
+import { getPublicSettings, type PublicSettings } from "@/lib/public-settings";
 
 export default function MockRedeemPage() {
   const searchParams = useSearchParams();
   const code = searchParams.get("code");
+  const [publicSettings, setPublicSettings] = useState<PublicSettings | null>(null);
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    getPublicSettings().then((settings) => {
+      if (active) setPublicSettings(settings);
+    });
+    return () => { active = false; };
+  }, []);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -21,7 +31,7 @@ export default function MockRedeemPage() {
     <div className="min-h-screen bg-surface">
       <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
         <div className="flex justify-center items-center h-16">
-          <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">GroundRewards</h1>
+          <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">{publicSettings?.project_name || "GroundRewards"}</h1>
         </div>
       </header>
 
