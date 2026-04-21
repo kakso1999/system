@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
 
@@ -17,6 +17,7 @@ from app.schemas.staff import (
     LoginRequest,
     StaffRegisterRequest,
 )
+from app.utils.auth_cookies import clear_auth_cookies, set_auth_cookies
 from app.utils.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
 
 router = APIRouter()
@@ -123,6 +124,7 @@ async def create_relation_records(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     payload: LoginRequest,
+    response: Response,
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> TokenResponse:
     staff = await db.staff_users.find_one({"username": payload.username})
@@ -140,15 +142,21 @@ async def login(
     )
     token = create_access_token({"sub": str(staff["_id"]), "role": "staff"})
     refresh = create_refresh_token({"sub": str(staff["_id"]), "role": "staff"})
+    set_auth_cookies(response, "staff", token, refresh)
     return TokenResponse(access_token=token, refresh_token=refresh, role="staff")
 
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
-    payload: RefreshRequest,
+    response: Response,
+    payload: RefreshRequest | None = None,
+    gr_staff_refresh: str | None = Cookie(None),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> TokenResponse:
-    data = decode_token(payload.refresh_token)
+    raw_refresh = gr_staff_refresh or (payload.refresh_token if payload else None)
+    if not raw_refresh:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token")
+    data = decode_token(raw_refresh)
     if not data or data.get("role") != "staff":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
     subject = data.get("sub")
@@ -163,6 +171,7 @@ async def refresh(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Staff not found or inactive")
     token = create_access_token({"sub": str(staff["_id"]), "role": "staff"})
     refresh_tok = create_refresh_token({"sub": str(staff["_id"]), "role": "staff"})
+    set_auth_cookies(response, "staff", token, refresh_tok)
     return TokenResponse(access_token=token, refresh_token=refresh_tok, role="staff")
 
 
@@ -230,3 +239,9 @@ async def change_password(
         },
     )
     return MessageResponse(message="Password updated successfully")
+
+
+@router.post("/logout", response_model=MessageResponse)
+async def logout(response: Response) -> MessageResponse:
+    clear_auth_cookies(response, "staff")
+    return MessageResponse(message="Logged out")

@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Home, QrCode, Users, Wallet, Coins } from "lucide-react";
-import { clearAuth, getStaffToken } from "@/lib/auth";
+import { clearAuth, isAuthenticated } from "@/lib/auth";
 import api from "@/lib/api";
 
 type NavItem = {
@@ -35,8 +35,7 @@ export default function PromoterLayout({ children }: { children: React.ReactNode
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
-    const token = getStaffToken();
-    if (!token) {
+    if (!isAuthenticated("staff")) {
       clearAuth("staff");
       router.replace("/staff-login");
       return;
@@ -47,7 +46,7 @@ export default function PromoterLayout({ children }: { children: React.ReactNode
   useEffect(() => {
     if (checkingAuth) return;
     const sendHeartbeat = () => {
-      if (!getStaffToken()) {
+      if (!isAuthenticated("staff")) {
         clearInterval(intervalId);
         return;
       }

@@ -1,11 +1,13 @@
 import hmac
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 from bson.errors import InvalidId
+from app.config import get_settings
 from app.database import get_db
+from app.utils.auth_cookies import access_cookie_name
 from app.utils.security import decode_token
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -21,13 +23,33 @@ def get_subject_object_id(payload: dict | None) -> ObjectId:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 
+def _extract_token(
+    request: Request,
+    role: str,
+    credentials: HTTPAuthorizationCredentials | None,
+) -> str | None:
+    """Extract access JWT from cookie (preferred) or Authorization header.
+
+    Bearer fallback is skipped when COOKIE_ONLY_AUTH=True so clients are
+    forced onto cookie-based auth once the rollout is complete.
+    """
+    cookie_token = request.cookies.get(access_cookie_name(role))
+    if cookie_token:
+        return cookie_token
+    if get_settings().COOKIE_ONLY_AUTH:
+        return None
+    return credentials.credentials if credentials else None
+
+
 async def get_current_admin(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> dict:
-    if not credentials:
+    token = _extract_token(request, "admin", credentials)
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    payload = decode_token(credentials.credentials)
+    payload = decode_token(token)
     if not payload or payload.get("role") != "admin":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     admin = await db.admins.find_one({"_id": get_subject_object_id(payload)})
@@ -39,12 +61,14 @@ async def get_current_admin(
 
 
 async def get_current_staff(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> dict:
-    if not credentials:
+    token = _extract_token(request, "staff", credentials)
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    payload = decode_token(credentials.credentials)
+    payload = decode_token(token)
     if not payload or payload.get("role") != "staff":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     staff = await db.staff_users.find_one({"_id": get_subject_object_id(payload)})

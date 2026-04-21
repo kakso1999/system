@@ -412,7 +412,11 @@ export default function PromoterHomePage() {
             <Menu className="w-6 h-6 text-primary" />
             <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">GroundRewards</h1>
           </div>
-          <button onClick={() => { clearAuth("staff"); router.push("/staff-login"); }} className="p-2 rounded-full hover:bg-primary/5">
+          <button onClick={async () => {
+            try { await api.post("/api/auth/staff/logout", {}); } catch { /* tolerate */ }
+            clearAuth("staff");
+            router.push("/staff-login");
+          }} className="p-2 rounded-full hover:bg-primary/5">
             <LogOut className="w-6 h-6 text-outline" />
           </button>
         </div>

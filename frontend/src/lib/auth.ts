@@ -1,95 +1,76 @@
-import Cookies from "js-cookie";
+// Auth state helper — post-HttpOnly-cookie migration.
+// Tokens live in HttpOnly cookies set by the backend. This module only stores
+// non-sensitive UI hints (role, must_change_password) in localStorage.
 
 export type AuthRole = "admin" | "staff";
 
 const AUTH_ROLES: AuthRole[] = ["admin", "staff"];
 
-function isSecureContext() {
-  return typeof window !== "undefined" && window.location.protocol === "https:";
+function roleKey(role: AuthRole) {
+  return `gr_${role}_role`;
 }
 
-function getCookieOptions() {
-  return {
-    expires: 7,
-    path: "/",
-    sameSite: "lax" as const,
-    secure: isSecureContext(),
-  };
+function mustChangeKey(role: AuthRole) {
+  return `gr_${role}_must_change_password`;
 }
 
-function getCookieRemovalOptions() {
-  return {
-    path: "/",
-    sameSite: "lax" as const,
-    secure: isSecureContext(),
-  };
-}
-
-function getCookieName(prefix: string, name: "token" | "role" | "refresh_token") {
-  return `${prefix}_${name}`;
-}
-
-export function setAuth(token: string, role: AuthRole, refreshToken?: string) {
-  const options = getCookieOptions();
-  Cookies.set(getCookieName(role, "token"), token, options);
-  Cookies.set(getCookieName(role, "role"), role, options);
-  if (refreshToken) {
-    Cookies.set(getCookieName(role, "refresh_token"), refreshToken, options);
-    return;
+function safeLocalStorage(): Storage | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
   }
-  Cookies.remove(getCookieName(role, "refresh_token"), getCookieRemovalOptions());
 }
 
-export function clearAuth(role?: string) {
-  const options = getCookieRemovalOptions();
-  const prefixes = role ? [role] : AUTH_ROLES;
+export function setAuth(role: AuthRole, mustChangePassword?: boolean) {
+  const store = safeLocalStorage();
+  if (!store) return;
+  store.setItem(roleKey(role), role);
+  if (mustChangePassword !== undefined) {
+    store.setItem(mustChangeKey(role), mustChangePassword ? "1" : "0");
+  }
+}
+
+export function clearAuth(role?: AuthRole) {
+  const store = safeLocalStorage();
+  if (!store) return;
+  const prefixes: AuthRole[] = role ? [role] : AUTH_ROLES;
   prefixes.forEach((prefix) => {
-    Cookies.remove(getCookieName(prefix, "token"), options);
-    Cookies.remove(getCookieName(prefix, "role"), options);
-    Cookies.remove(getCookieName(prefix, "refresh_token"), options);
+    store.removeItem(roleKey(prefix));
+    store.removeItem(mustChangeKey(prefix));
   });
-  // 清除旧格式 cookie 残留
-  Cookies.remove("token", options);
-  Cookies.remove("role", options);
-  Cookies.remove("refresh_token", options);
 }
 
-export function getRole(): string | undefined {
-  if (Cookies.get(getCookieName("admin", "token"))) {
-    return "admin";
-  }
-  if (Cookies.get(getCookieName("staff", "token"))) {
-    return "staff";
-  }
+export function getRole(): AuthRole | undefined {
+  const store = safeLocalStorage();
+  if (!store) return undefined;
+  if (store.getItem(roleKey("admin"))) return "admin";
+  if (store.getItem(roleKey("staff"))) return "staff";
   return undefined;
 }
 
-export function getToken(role?: string): string | undefined {
-  if (role) {
-    return Cookies.get(getCookieName(role, "token"));
-  }
-  return getAdminToken() || getStaffToken();
+export function isAuthenticated(role?: AuthRole): boolean {
+  const store = safeLocalStorage();
+  if (!store) return false;
+  if (role) return store.getItem(roleKey(role)) === role;
+  return !!(store.getItem(roleKey("admin")) || store.getItem(roleKey("staff")));
 }
 
-export function getRefreshToken(role?: string): string | undefined {
-  if (role) {
-    return Cookies.get(getCookieName(role, "refresh_token"));
-  }
-  const currentRole = getRole();
-  return currentRole ? Cookies.get(getCookieName(currentRole, "refresh_token")) : undefined;
-}
-
-export function isAuthenticated(role?: string): boolean {
-  if (role) {
-    return !!Cookies.get(getCookieName(role, "token"));
-  }
-  return !!getAdminToken() || !!getStaffToken();
-}
-
+// Compat shims — tokens live in HttpOnly cookies now; these exist so api.ts's
+// existing request interceptor naturally skips attaching Authorization headers.
 export function getAdminToken(): string | undefined {
-  return Cookies.get(getCookieName("admin", "token"));
+  return undefined;
 }
 
 export function getStaffToken(): string | undefined {
-  return Cookies.get(getCookieName("staff", "token"));
+  return undefined;
+}
+
+export function getToken(_role?: AuthRole): string | undefined {
+  return undefined;
+}
+
+export function getRefreshToken(_role?: AuthRole): string | undefined {
+  return undefined;
 }

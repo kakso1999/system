@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3006"
     TRUSTED_PROXY_IPS: str = "127.0.0.1,::1"
     REPORT_TIMEZONE: str = "Asia/Manila"
+    COOKIE_ONLY_AUTH: bool = False
+    COOKIE_SECURE: bool = False
+    COOKIE_SAMESITE: str = "lax"
 
     @model_validator(mode="after")
     def _validate_secrets(self):

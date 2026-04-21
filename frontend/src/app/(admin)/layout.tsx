@@ -2,7 +2,7 @@
 
 import { useRouter, usePathname } from "next/navigation";
 import api from "@/lib/api";
-import { clearAuth, getAdminToken } from "@/lib/auth";
+import { clearAuth, isAuthenticated } from "@/lib/auth";
 import { useEffect, useState } from "react";
 import { LayoutDashboard, Users, Users2, Megaphone, Receipt, Wallet, Shield, Settings, ChevronLeft, ChevronRight, LogOut, ShieldCheck, UserPlus, Zap, Handshake } from "lucide-react";
 
@@ -28,8 +28,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [registrationsPendingCount, setRegistrationsPendingCount] = useState(0);
 
   useEffect(() => {
-    const token = getAdminToken();
-    if (!token) {
+    if (!isAuthenticated("admin")) {
       clearAuth("admin");
       router.replace("/admin-login");
       return;
@@ -66,7 +65,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     };
   }, [checkingAuth]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await api.post("/api/auth/admin/logout", {});
+    } catch {
+      // tolerate network errors — still clear local hint
+    }
     clearAuth("admin");
     router.push("/admin-login");
   };

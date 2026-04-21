@@ -135,8 +135,8 @@ function useLoginState() {
 
   useEffect(() => { clearAuth(); }, []);
 
-  const finishLogin = (accessToken: string, refreshToken?: string) => {
-    setAuth(accessToken, "admin", refreshToken);
+  const finishLogin = (mustChangePassword: boolean) => {
+    setAuth("admin", mustChangePassword);
     window.location.href = "/dashboard";
   };
 
@@ -160,7 +160,7 @@ async function submitLogin(event: FormEvent, state: LoginState) {
       state.setPendingAuth({ accessToken: res.data.access_token, refreshToken: res.data.refresh_token, oldPassword: state.password });
       return;
     }
-    state.finishLogin(res.data.access_token, res.data.refresh_token);
+    state.finishLogin(false);
   } catch (err) {
     console.error("Login error:", err);
     state.setError(getErrorDetail(err, "登录失败"));
@@ -184,10 +184,9 @@ async function submitForcedPassword(event: FormEvent, state: LoginState) {
   state.setPasswordError("");
   state.setLoading(true);
   try {
-    await api.post("/api/auth/admin/password", { old_password: state.pendingAuth.oldPassword, new_password: state.newPassword }, { headers: { Authorization: `Bearer ${state.pendingAuth.accessToken}` } });
-    const auth = state.pendingAuth;
+    await api.post("/api/auth/admin/password", { old_password: state.pendingAuth.oldPassword, new_password: state.newPassword });
     state.clearPasswordState();
-    state.finishLogin(auth.accessToken, auth.refreshToken);
+    state.finishLogin(true);
   } catch (err) {
     state.setPasswordError(getErrorDetail(err, "修改密码失败"));
   } finally {

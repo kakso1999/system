@@ -34,11 +34,13 @@ export function resolveApiUrl(path?: string | null) {
 const api = axios.create({
   baseURL,
   headers: { "Content-Type": "application/json" },
+  withCredentials: true,
 });
 
 const refreshClient = axios.create({
   baseURL,
   headers: { "Content-Type": "application/json" },
+  withCredentials: true,
 });
 
 const refreshState: Record<AuthRole, RefreshState> = {
@@ -167,15 +169,15 @@ function queueRequest(role: AuthRole, originalRequest: RetryRequestConfig) {
   });
 }
 
-async function refreshAccessToken(role: AuthRole, refreshToken: string) {
+async function refreshAccessToken(role: AuthRole) {
   const refreshUrl = role === "admin" ? "/api/auth/admin/refresh" : "/api/auth/staff/refresh";
-  const response = await refreshClient.post(refreshUrl, { refresh_token: refreshToken });
-  const nextToken = response.data.access_token;
-  setAuth(nextToken, role, response.data.refresh_token);
-  return nextToken;
+  const response = await refreshClient.post(refreshUrl, {});
+  setAuth(role, response.data.must_change_password);
+  // access_token in the response body is ignored — the HttpOnly cookie is the source of truth
+  return response.data.access_token ?? "";
 }
 
-async function retryWithRefresh(role: AuthRole, refreshToken: string, originalRequest: RetryRequestConfig) {
+async function retryWithRefresh(role: AuthRole, originalRequest: RetryRequestConfig) {
   if (refreshState[role].isRefreshing) {
     return queueRequest(role, originalRequest);
   }
@@ -183,7 +185,7 @@ async function retryWithRefresh(role: AuthRole, refreshToken: string, originalRe
   originalRequest._retry = true;
   refreshState[role].isRefreshing = true;
   try {
-    const nextToken = await refreshAccessToken(role, refreshToken);
+    const nextToken = await refreshAccessToken(role);
     processQueue(role, null, nextToken);
     setAuthorizationHeader(originalRequest, nextToken);
     return api(originalRequest);
@@ -215,13 +217,12 @@ async function handleResponseError(error: unknown) {
     return Promise.reject(error);
   }
 
-  const refreshToken = role ? getRefreshToken(role) : undefined;
-  if (!role || !refreshToken) {
+  if (!role) {
     handleAuthFailure(role);
     return Promise.reject(error);
   }
 
-  return retryWithRefresh(role, refreshToken, originalRequest);
+  return retryWithRefresh(role, originalRequest);
 }
 
 api.interceptors.request.use((config) => {
