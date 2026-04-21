@@ -483,6 +483,10 @@ async def work_stop(
             "updated_at": now,
         }},
     )
+    await db.promo_live_tokens.update_many(
+        {"staff_id": current_staff["_id"], "status": "active"},
+        {"$set": {"status": "expired", "expired_at": now, "expired_reason": "work_stopped"}},
+    )
     await _log_activity(db, current_staff["_id"], "stop")
     staff = await db.staff_users.find_one({"_id": current_staff["_id"]})
     return _work_state_response(staff)
@@ -509,6 +513,10 @@ async def work_pause(
             "paused_at": now,
             "updated_at": now,
         }},
+    )
+    await db.promo_live_tokens.update_many(
+        {"staff_id": current_staff["_id"], "status": "active"},
+        {"$set": {"status": "expired", "expired_at": now, "expired_reason": "work_paused"}},
     )
     await _log_activity(db, current_staff["_id"], "pause", reason)
     staff = await db.staff_users.find_one({"_id": current_staff["_id"]})

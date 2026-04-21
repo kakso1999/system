@@ -71,10 +71,10 @@ async def seed_settings():
         {"key": "risk_ip_unique", "value": True, "group": "risk_control", "description": "IP unique claim"},
         {"key": "risk_device_unique", "value": False, "group": "risk_control", "description": "Device fingerprint unique"},
         {"key": "sms_verification", "value": False, "group": "risk_control", "description": "SMS OTP verification"},
-        {"key": "sms_api_url", "value": "http://101.44.162.101:9090/sms/batch/v1", "group": "sms_config", "description": "SMS API endpoint"},
-        {"key": "sms_appkey", "value": "9N9Q8M", "group": "sms_config", "description": "SMS appkey"},
-        {"key": "sms_appcode", "value": "1000", "group": "sms_config", "description": "SMS appcode"},
-        {"key": "sms_appsecret", "value": "wW3mjj", "group": "sms_config", "description": "SMS appsecret"},
+        {"key": "sms_api_url", "value": "", "group": "sms_config", "description": "SMS API endpoint (set per-env)"},
+        {"key": "sms_appkey", "value": "", "group": "sms_config", "description": "SMS appkey (set per-env; rotate before production)"},
+        {"key": "sms_appcode", "value": "", "group": "sms_config", "description": "SMS appcode (set per-env)"},
+        {"key": "sms_appsecret", "value": "", "group": "sms_config", "description": "SMS appsecret (set per-env; rotate before production)"},
         {"key": "sms_extend", "value": "", "group": "sms_config", "description": "SMS extend field"},
         {"key": "sms_signature", "value": "GroundRewards", "group": "sms_config", "description": "SMS signature name"},
         {"key": "sms_otp_template", "value": "[{signature}] Your OTP code is {code}. Valid for 10 minutes.", "group": "sms_config", "description": "SMS message template"},
@@ -95,11 +95,11 @@ async def seed_settings():
         {"key": "vip_threshold_3", "value": 1000, "group": "vip", "description": "VIP3 threshold"},
         {"key": "vip_threshold_svip", "value": 10000, "group": "vip", "description": "Super VIP threshold"},
         {"key": "team_reward_100_threshold", "value": 100, "group": "team_reward", "description": "Team reward 100 threshold"},
-        {"key": "team_reward_100", "value": 30000, "group": "team_reward", "description": "Team reward 100 amount (cents)"},
+        {"key": "team_reward_100", "value": 300, "group": "team_reward", "description": "Team reward 100 amount (PHP; converted via to_cents on read)"},
         {"key": "team_reward_1000_threshold", "value": 1000, "group": "team_reward", "description": "Team reward 1000 threshold"},
-        {"key": "team_reward_1000", "value": 50000, "group": "team_reward", "description": "Team reward 1000 amount (cents)"},
+        {"key": "team_reward_1000", "value": 500, "group": "team_reward", "description": "Team reward 1000 amount (PHP; converted via to_cents on read)"},
         {"key": "team_reward_10000_threshold", "value": 10000, "group": "team_reward", "description": "Team reward 10000 threshold"},
-        {"key": "team_reward_10000", "value": 100000, "group": "team_reward", "description": "Team reward 10000 amount (cents)"},
+        {"key": "team_reward_10000", "value": 1000, "group": "team_reward", "description": "Team reward 10000 amount (PHP; converted via to_cents on read)"},
         {"key": "external_api_key", "value": "PLEASE_SET_API_KEY", "group": "integration", "description": "X-API-Key required for /api/external/* endpoints (rotate before production)"},
         {"key": "project_name", "value": "GroundRewards", "group": "general", "description": "Brand / project name shown in headers"},
         {"key": "activity_title", "value": "Lucky Wheel", "group": "general", "description": "Activity title shown to end users"},
@@ -119,6 +119,21 @@ async def seed_settings():
             {"$setOnInsert": item},
             upsert=True,
         )
+
+    # Runtime warning: SMS is enabled but credentials are blank (common misconfig)
+    sms_doc = await db.system_settings.find_one({"key": "sms_verification"})
+    if sms_doc and sms_doc.get("value") is True:
+        missing = []
+        for cred_key in ("sms_api_url", "sms_appkey", "sms_appcode", "sms_appsecret"):
+            cred_doc = await db.system_settings.find_one({"key": cred_key})
+            if not cred_doc or not str(cred_doc.get("value") or "").strip():
+                missing.append(cred_key)
+        if missing:
+            logger.warning(
+                "sms_verification=True but these credentials are empty: %s. "
+                "OTP sends will fail until these are set via /api/admin/settings.",
+                ", ".join(missing),
+            )
 
 
 async def seed_bonus_default_rule():
@@ -190,3 +205,15 @@ app.mount("/uploads", StaticFiles(directory=str(upload_dir)), name="uploads")
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/_version")
+async def version():
+    return {
+        "version": "2.5.0-f1",
+        "waves": ["A1", "A2", "A3", "F1"],
+        "features": {
+            "cookie_only_auth": settings.COOKIE_ONLY_AUTH,
+            "cors_origins": settings.cors_origin_list,
+        },
+    }
