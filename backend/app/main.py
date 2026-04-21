@@ -109,6 +109,9 @@ async def seed_settings():
         {"key": "phone_daily_limit", "value": 3, "group": "risk_control", "description": "Maximum OTP requests per phone in a rolling 10-minute window"},
         {"key": "ip_daily_limit", "value": 20, "group": "risk_control", "description": "Maximum OTP requests per IP inside ip_window_min"},
         {"key": "ip_window_min", "value": 60, "group": "risk_control", "description": "Rolling window in minutes for ip_daily_limit"},
+        {"key": "customer_service_enabled", "value": False, "group": "customer_service", "description": "Show floating customer-service button on user pages"},
+        {"key": "customer_service_whatsapp", "value": "", "group": "customer_service", "description": "WhatsApp link or number (e.g., https://wa.me/63XXXXXXXXXX)"},
+        {"key": "customer_service_telegram", "value": "", "group": "customer_service", "description": "Telegram link (e.g., https://t.me/yourhandle)"},
     ]
     for item in defaults:
         await db.system_settings.update_one(
@@ -153,7 +156,7 @@ app.add_middleware(
 # Import and register routers
 from app.routers import admin_auth, staff_auth, campaigns, wheel, reward_codes, admins
 from app.routers import staff, claims, user_flow, risk_control, settings as settings_router
-from app.routers import promoter, finance, dashboard, external, bonus, registrations, sponsors
+from app.routers import promoter, finance, dashboard, external, bonus, registrations, sponsors, public_settings
 
 app.include_router(admin_auth.router, prefix="/api/auth/admin", tags=["Admin Auth"])
 app.include_router(staff_auth.router, prefix="/api/auth/staff", tags=["Staff Auth"])
@@ -175,6 +178,7 @@ app.include_router(promoter.router, prefix="/api/promoter", tags=["Promoter"])
 app.include_router(external.router, prefix="/api/external", tags=["External"])
 app.include_router(sponsors.router, prefix="/api/admin/sponsors", tags=["Sponsors"])
 app.include_router(sponsors.public_router, prefix="/api/sponsors", tags=["Sponsors Public"])
+app.include_router(public_settings.router, prefix="/api/public", tags=["Public Settings"])
 
 # Static files for uploaded images
 upload_dir = Path(__file__).parent.parent / "uploads"

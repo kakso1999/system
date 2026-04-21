@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, ArrowLeft, ChevronDown, PartyPopper } from "lucide-react";
 import api from "@/lib/api";
+import SponsorsCarousel from "@/components/sponsors-carousel";
 import { ClaimResultCard } from "./claim-result";
 import { OtpClaimCard } from "./otp-claim-card";
 import { DemoCodeModal } from "./wheel-overlays";
@@ -265,6 +266,7 @@ export default function WheelPage() {
           )}
         </div>
         {showResult && result && <ResultPanel result={result} claimResult={claimResult} redirectCountdown={redirectCountdown} sessionError={sessionError} phone={phone} otp={otp} smsEnabled={smsEnabled} phoneVerified={phoneVerified} otpSent={otpSent} verifying={verifying} claiming={claiming} otpCooldown={otpCooldown} onPhoneChange={setPhone} onOtpChange={handleOtpChange} onOtpKeyDown={handleOtpKeyDown} onVerifyPhone={handleVerifyPhone} onVerifyOtp={handleVerifyOtp} onClaim={handleClaim} />}
+        <SponsorsCarousel variant="wheel" />
       </main>
 
       <DemoCodeModal demoCode={demoCode} onClose={() => setDemoCode(null)} />
