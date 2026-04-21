@@ -23,6 +23,23 @@ from app.utils.helpers import to_str_id
 router = APIRouter(dependencies=[Depends(get_current_admin)])
 public_router = APIRouter()
 
+_MAX_UPLOAD_BYTES = 2 * 1024 * 1024  # 2 MB
+_ALLOWED_EXTS = {"png", "jpg", "jpeg", "webp", "svg"}
+
+
+def _sniff_image_ext(content: bytes) -> str | None:
+    if len(content) >= 8 and content[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if len(content) >= 3 and content[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "webp"
+    head = content[:256].lstrip().lower()
+    if head.startswith(b"<?xml") or head.startswith(b"<svg"):
+        return "svg"
+    return None
+
+
 UPLOAD_DIR = Path(__file__).parent.parent.parent / "uploads"
 
 
@@ -135,11 +152,20 @@ async def upload_sponsor_logo(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     sponsor = await get_sponsor_or_404(db, sponsor_id)
-    ext = file.filename.rsplit(".", 1)[-1] if file.filename else "png"
-    filename = f"sponsor_{uuid.uuid4().hex[:8]}.{ext}"
+    content = await file.read()
+    if len(content) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty file")
+    if len(content) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large (max 2 MB)")
+    sniffed = _sniff_image_ext(content)
+    if sniffed is None or sniffed not in _ALLOWED_EXTS:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Only PNG / JPG / WEBP / SVG images are accepted",
+        )
+    filename = f"sponsor_{uuid.uuid4().hex[:8]}.{sniffed}"
     filepath = UPLOAD_DIR / filename
     UPLOAD_DIR.mkdir(exist_ok=True)
-    content = await file.read()
     filepath.write_bytes(content)
     logo_url = f"/uploads/{filename}"
     await db.sponsors.update_one(
