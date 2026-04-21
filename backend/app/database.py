@@ -103,6 +103,10 @@ async def create_indexes():
     await db.staff_payout_accounts.create_index("staff_id")
     await db.withdrawal_requests.create_index([("staff_id", 1), ("status", 1)])
     await db.withdrawal_requests.create_index("created_at")
+    # F2.2 withdrawal reservation - TTL auto-cleanup + uniqueness
+    await db.withdrawal_reservations.create_index("expires_at", expireAfterSeconds=0)
+    await db.withdrawal_reservations.create_index([("staff_id", 1), ("expires_at", 1)])
+    await db.withdrawal_reservations.create_index("reservation_id", unique=True)
     # promo_live_tokens
     await db.promo_live_tokens.create_index([("staff_id", 1), ("status", 1)])
     await db.promo_live_tokens.create_index("token_signature", unique=True)

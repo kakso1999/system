@@ -27,6 +27,7 @@ async def create_commission_log(
     rate: float,
     vip_level: int,
     campaign_id,
+    initial_status: str = "approved",
 ):
     now = datetime.now(timezone.utc)
     amount_cents = int(amount_cents)
@@ -43,24 +44,33 @@ async def create_commission_log(
         "vip_level_at_time": vip_level,
         "currency": "PHP",
         "campaign_id": campaign_id,
-        "status": "approved",
+        "status": initial_status,
         "created_at": now,
     }
     try:
         await db.commission_logs.insert_one(log)
     except DuplicateKeyError:
         return
-    await db.staff_users.update_one(
-        {"_id": beneficiary_staff_id},
-        {"$inc": {
-            "stats.total_commission": from_cents(amount_cents),
-            "stats.total_commission_cents": amount_cents,
-        }},
-    )
+    if initial_status == "approved":
+        await db.staff_users.update_one(
+            {"_id": beneficiary_staff_id},
+            {"$inc": {
+                "stats.total_commission": from_cents(amount_cents),
+                "stats.total_commission_cents": amount_cents,
+            }},
+        )
 
 
 async def calculate_commissions(db, staff_doc, claim_id, campaign_id):
     vip_level = int(staff_doc.get("vip_level", 0))
+    claim_for_type = await db.claims.find_one({"_id": claim_id}, {"prize_type": 1})
+    prize_type = (claim_for_type or {}).get("prize_type", "")
+    hold_until_redeem = bool(await get_setting(db, "commission_after_redeem", False))
+    initial_status = (
+        "pending_redeem"
+        if (prize_type == "website" and hold_until_redeem)
+        else "approved"
+    )
     level1_key = {
         0: "commission_level1_default",
         1: "commission_vip1",
@@ -80,6 +90,7 @@ async def calculate_commissions(db, staff_doc, claim_id, campaign_id):
         rate=level1_rate,
         vip_level=vip_level,
         campaign_id=campaign_id,
+        initial_status=initial_status,
     )
 
     relation1 = await db.staff_relations.find_one({"staff_id": staff_doc["_id"], "level": 1})
@@ -97,6 +108,7 @@ async def calculate_commissions(db, staff_doc, claim_id, campaign_id):
                 rate=rate,
                 vip_level=int(ancestor.get("vip_level", 0)),
                 campaign_id=campaign_id,
+                initial_status=initial_status,
             )
 
     relation2 = await db.staff_relations.find_one({"staff_id": staff_doc["_id"], "level": 2})
@@ -114,6 +126,7 @@ async def calculate_commissions(db, staff_doc, claim_id, campaign_id):
                 rate=rate,
                 vip_level=int(ancestor.get("vip_level", 0)),
                 campaign_id=campaign_id,
+                initial_status=initial_status,
             )
 
     total_cents = 0

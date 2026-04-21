@@ -85,6 +85,7 @@ async def seed_settings():
         {"key": "commission_level1_default", "value": 1.0, "group": "commission", "description": "Level 1 default commission"},
         {"key": "commission_level2", "value": 0.3, "group": "commission", "description": "Level 2 commission"},
         {"key": "commission_level3", "value": 0.1, "group": "commission", "description": "Level 3 commission"},
+        {"key": "commission_after_redeem", "value": False, "group": "commission", "description": "If True, website-prize commissions stay in 'pending_redeem' until the reward code is externally redeemed, then flipped to 'approved'."},
         {"key": "commission_vip1", "value": 1.2, "group": "commission", "description": "VIP1 level 1 commission"},
         {"key": "commission_vip2", "value": 1.5, "group": "commission", "description": "VIP2 level 1 commission"},
         {"key": "commission_vip3", "value": 1.6, "group": "commission", "description": "VIP3 level 1 commission"},

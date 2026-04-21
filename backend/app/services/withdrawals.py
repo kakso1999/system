@@ -1,5 +1,5 @@
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
 from fastapi import HTTPException, status
@@ -110,27 +110,65 @@ async def create_withdrawal_request(
     if not math.isfinite(amount) or amount <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid withdrawal amount")
     amount_cents = to_cents(amount)
-    snapshot_cents = {
-        "available_cents": await sum_amount_cents(
+    now = datetime.now(timezone.utc)
+
+    # F2.2 - reservation pattern (standalone-MongoDB safe, no transactions).
+    # Insert a short-lived reservation first, then compute available including sibling
+    # reservations. Two concurrent requests see each other and at least one will fail.
+    reservation_id = ObjectId()
+    reservation_ttl_sec = 30
+    reservation = {
+        "_id": ObjectId(),
+        "reservation_id": reservation_id,
+        "staff_id": staff_id,
+        "amount_cents": amount_cents,
+        "created_at": now,
+        "expires_at": now + timedelta(seconds=reservation_ttl_sec),
+    }
+    try:
+        await db.withdrawal_reservations.insert_one(reservation)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Withdrawal reservation failed, retry") from exc
+
+    try:
+        approved_cents = await sum_amount_cents(
             db.commission_logs,
             {"beneficiary_staff_id": staff_id, "status": "approved"},
-        ) - await sum_amount_cents(
+        )
+        open_withdrawals_cents = await sum_amount_cents(
             db.withdrawal_requests,
             {"staff_id": staff_id, "status": {"$ne": "rejected"}},
-        ),
-    }
-    if amount_cents > max(snapshot_cents["available_cents"], 0):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Withdrawal amount exceeds available balance")
-    now = datetime.now(timezone.utc)
-    document = build_withdrawal_document(
-        staff_id=staff_id,
-        amount_cents=amount_cents,
-        payout_account=payout_account,
-        now=now,
-    )
-    result = await db.withdrawal_requests.insert_one(document)
-    document["_id"] = result.inserted_id
-    return document
+        )
+        sibling_reservations_cents = await sum_amount_cents(
+            db.withdrawal_reservations,
+            {
+                "staff_id": staff_id,
+                "reservation_id": {"$ne": reservation_id},
+                "expires_at": {"$gt": now},
+            },
+        )
+        available_cents = approved_cents - open_withdrawals_cents - sibling_reservations_cents
+        if amount_cents > max(available_cents, 0):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Withdrawal amount exceeds available balance",
+            )
+
+        document = build_withdrawal_document(
+            staff_id=staff_id,
+            amount_cents=amount_cents,
+            payout_account=payout_account,
+            now=now,
+        )
+        result = await db.withdrawal_requests.insert_one(document)
+        document["_id"] = result.inserted_id
+        return document
+    finally:
+        # Always release the reservation - TTL is the fallback if this fails.
+        try:
+            await db.withdrawal_reservations.delete_one({"reservation_id": reservation_id})
+        except Exception:
+            pass
 
 
 async def attach_staff_metadata(
