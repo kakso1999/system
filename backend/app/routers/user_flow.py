@@ -14,6 +14,7 @@ from app.services.commission import calculate_commissions
 from app.services.team_reward import check_team_rewards
 from app.services.vip import check_vip_upgrade
 from app.utils.live_token import generate_session_token
+from app.utils.request_ip import extract_client_ip
 from app.utils.security import sign_result_token, verify_result_token
 from app.utils.sms import send_sms
 
@@ -201,7 +202,7 @@ async def welcome(
     await db.scan_logs.insert_one({
         "staff_id": staff["_id"],
         "campaign_id": campaign["_id"],
-        "ip": request.client.host if request.client else "",
+        "ip": extract_client_ip(request),
         "created_at": datetime.now(timezone.utc),
     })
 
@@ -340,7 +341,7 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
     # Validate phone format
     phone = validate_phone(phone)
 
-    ip = request.client.host if request.client else ""
+    ip = extract_client_ip(request)
 
     now = datetime.now(timezone.utc)
     cooldown_sec = int(await get_setting(db, "sms_cooldown_sec") or 60)
@@ -474,7 +475,7 @@ async def complete(
     spin_token = str(payload.get("spin_token", "")).strip()
     if not spin_token:
         raise HTTPException(status_code=400, detail="spin_token_required")
-    ip = request.client.host if request.client else ""
+    ip = extract_client_ip(request)
     device_fp = payload.get("device_fingerprint", "")
     staff_code = str(payload.get("staff_code", "")).strip().upper()
     if not staff_code:
@@ -636,7 +637,7 @@ async def pin_verify(payload: dict, request: Request, db: AsyncIOMotorDatabase =
     if not fp:
         return {"success": False, "error": "device_fingerprint_required", "attempts_remaining": 0}
     signature = str(payload.get("token_signature", "")).strip()
-    ip = request.client.host if request.client else ""
+    ip = extract_client_ip(request)
 
     if not staff_code or not pin or not signature:
         return {"success": False, "error": "invalid_signature", "attempts_remaining": 0}
