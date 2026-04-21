@@ -4,6 +4,8 @@ import time
 
 from pymongo.errors import DuplicateKeyError
 
+from app.utils.money import from_cents, to_cents
+
 
 async def get_setting(db, key: str, default=None):
     doc = await db.system_settings.find_one({"key": key})
@@ -23,13 +25,16 @@ async def get_team_total(db, staff_id) -> int:
     return total
 
 
-async def award_team_reward(db, staff_doc, *, milestone: str, threshold: int, amount: float, team_total: int):
+async def award_team_reward(db, staff_doc, *, milestone: str, threshold: int, amount_cents: int, team_total: int):
     now = datetime.now(timezone.utc)
+    amount_cents = int(amount_cents)
+    amount = from_cents(amount_cents)
     reward = {
         "staff_id": staff_doc["_id"],
         "milestone": milestone,
         "threshold": threshold,
         "amount": amount,
+        "amount_cents": amount_cents,
         "team_total_at_time": team_total,
         "currency": "PHP",
         "created_at": now,
@@ -46,6 +51,7 @@ async def award_team_reward(db, staff_doc, *, milestone: str, threshold: int, am
         "level": 0,
         "type": "team_reward",
         "amount": amount,
+        "amount_cents": amount_cents,
         "rate": amount,
         "vip_level_at_time": int(staff_doc.get("vip_level", 0)),
         "currency": "PHP",
@@ -55,7 +61,10 @@ async def award_team_reward(db, staff_doc, *, milestone: str, threshold: int, am
     })
     await db.staff_users.update_one(
         {"_id": staff_doc["_id"]},
-        {"$inc": {"stats.total_commission": amount}},
+        {"$inc": {
+            "stats.total_commission": amount,
+            "stats.total_commission_cents": amount_cents,
+        }},
     )
 
 
@@ -63,17 +72,17 @@ async def check_team_rewards(db, staff_doc):
     own_total = int(staff_doc.get("stats", {}).get("total_valid", 0))
     team_total = own_total + await get_team_total(db, staff_doc["_id"])
     milestones = [
-        ("team_reward_100", int(await get_setting(db, "team_reward_100_threshold", 100)), float(await get_setting(db, "team_reward_100", 300))),
-        ("team_reward_1000", int(await get_setting(db, "team_reward_1000_threshold", 1000)), float(await get_setting(db, "team_reward_1000", 500))),
-        ("team_reward_10000", int(await get_setting(db, "team_reward_10000_threshold", 10000)), float(await get_setting(db, "team_reward_10000", 1000))),
+        ("team_reward_100", int(await get_setting(db, "team_reward_100_threshold", 100)), to_cents(await get_setting(db, "team_reward_100", 300))),
+        ("team_reward_1000", int(await get_setting(db, "team_reward_1000_threshold", 1000)), to_cents(await get_setting(db, "team_reward_1000", 500))),
+        ("team_reward_10000", int(await get_setting(db, "team_reward_10000_threshold", 10000)), to_cents(await get_setting(db, "team_reward_10000", 1000))),
     ]
-    for milestone, threshold, amount in milestones:
+    for milestone, threshold, amount_cents in milestones:
         if team_total >= threshold:
             await award_team_reward(
                 db,
                 staff_doc,
                 milestone=milestone,
                 threshold=threshold,
-                amount=amount,
+                amount_cents=amount_cents,
                 team_total=team_total,
             )

@@ -5,38 +5,50 @@ from bson import ObjectId
 from fastapi import HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.utils.helpers import to_str_ids
+from app.utils.helpers import to_str_id, to_str_ids
+from app.utils.money import from_cents, read_cents, to_cents
+
+
+async def sum_amount_cents(collection, match: dict) -> int:
+    pipeline = [
+        {"$match": match},
+        {"$group": {"_id": None, "total": {"$sum": "$amount_cents"}}},
+    ]
+    result = await collection.aggregate(pipeline).to_list(length=1)
+    if not result:
+        return 0
+    try:
+        return int(result[0]["total"])
+    except (TypeError, ValueError):
+        return 0
 
 
 async def sum_amount(collection, match: dict) -> float:
-    result = await collection.aggregate([
-        {"$match": match},
-        {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
-    ]).to_list(length=1)
-    return float(result[0]["total"]) if result else 0.0
+    return from_cents(await sum_amount_cents(collection, match))
 
 
 async def get_withdrawal_balance_snapshot(
     db: AsyncIOMotorDatabase,
     staff_id: ObjectId,
 ) -> dict:
-    total_approved = await sum_amount(
+    total_approved_cents = await sum_amount_cents(
         db.commission_logs,
         {"beneficiary_staff_id": staff_id, "status": "approved"},
     )
-    total_withdrawn = await sum_amount(
+    total_withdrawn_cents = await sum_amount_cents(
         db.withdrawal_requests,
         {"staff_id": staff_id, "status": {"$ne": "rejected"}},
     )
-    pending_withdrawals = await sum_amount(
+    pending_cents = await sum_amount_cents(
         db.withdrawal_requests,
         {"staff_id": staff_id, "status": "pending"},
     )
+    available_cents = total_approved_cents - total_withdrawn_cents
     return {
-        "total_approved": round(total_approved, 2),
-        "total_withdrawn": round(total_withdrawn, 2),
-        "available": round(total_approved - total_withdrawn, 2),
-        "pending_withdrawals": round(pending_withdrawals, 2),
+        "total_approved": from_cents(total_approved_cents),
+        "total_withdrawn": from_cents(total_withdrawn_cents),
+        "available": from_cents(available_cents),
+        "pending_withdrawals": from_cents(pending_cents),
     }
 
 
@@ -60,14 +72,16 @@ def generate_withdrawal_no(now: datetime) -> str:
 def build_withdrawal_document(
     *,
     staff_id: ObjectId,
-    amount: float,
+    amount_cents: int,
     payout_account: dict,
     now: datetime,
 ) -> dict:
+    amount_cents = int(amount_cents)
     return {
         "withdrawal_no": generate_withdrawal_no(now),
         "staff_id": staff_id,
-        "amount": round(amount, 2),
+        "amount": from_cents(amount_cents),
+        "amount_cents": amount_cents,
         "currency": "PHP",
         "payout_account_id": payout_account["_id"],
         "payout_account_type": payout_account.get("type", ""),
@@ -95,13 +109,22 @@ async def create_withdrawal_request(
 ) -> dict:
     if not math.isfinite(amount) or amount <= 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid withdrawal amount")
-    snapshot = await get_withdrawal_balance_snapshot(db, staff_id)
-    if amount > max(snapshot["available"], 0):
+    amount_cents = to_cents(amount)
+    snapshot_cents = {
+        "available_cents": await sum_amount_cents(
+            db.commission_logs,
+            {"beneficiary_staff_id": staff_id, "status": "approved"},
+        ) - await sum_amount_cents(
+            db.withdrawal_requests,
+            {"staff_id": staff_id, "status": {"$ne": "rejected"}},
+        ),
+    }
+    if amount_cents > max(snapshot_cents["available_cents"], 0):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Withdrawal amount exceeds available balance")
     now = datetime.now(timezone.utc)
     document = build_withdrawal_document(
         staff_id=staff_id,
-        amount=amount,
+        amount_cents=amount_cents,
         payout_account=payout_account,
         now=now,
     )
@@ -134,6 +157,13 @@ async def attach_staff_metadata(
     return enriched_items
 
 
+def serialize_withdrawal_item(doc: dict) -> dict:
+    data = to_str_id(doc)
+    data["amount"] = from_cents(read_cents(doc))
+    data.pop("amount_cents", None)
+    return data
+
+
 async def fetch_withdrawal_page(
     db: AsyncIOMotorDatabase,
     *,
@@ -148,7 +178,7 @@ async def fetch_withdrawal_page(
         items = await attach_staff_metadata(db, items)
     total = await db.withdrawal_requests.count_documents(query)
     return {
-        "items": to_str_ids(items),
+        "items": [serialize_withdrawal_item(item) for item in items],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -178,6 +208,7 @@ async def log_finance_action(
     amount: float,
     remark: str,
 ) -> None:
+    cents = to_cents(amount)
     await db.finance_action_logs.insert_one({
         "operator": admin.get("username", "admin"),
         "action": action,
@@ -185,7 +216,8 @@ async def log_finance_action(
         "target_id": target_id,
         "old_status": old_status,
         "new_status": new_status,
-        "amount_change": amount,
+        "amount_change": from_cents(cents),
+        "amount_change_cents": cents,
         "remark": remark,
         "created_at": datetime.now(timezone.utc),
     })

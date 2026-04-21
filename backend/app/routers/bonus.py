@@ -31,6 +31,7 @@ from app.services.bonus import (
     sorted_tiers,
 )
 from app.utils.helpers import to_str_id
+from app.utils.money import from_cents, read_cents, to_cents
 
 router = APIRouter(dependencies=[Depends(get_super_admin)])
 promoter_router = APIRouter()
@@ -120,12 +121,13 @@ def serialize_bonus_rule(
 
 def serialize_bonus_record(doc: dict) -> dict:
     data = to_str_id(doc)
+    cents = read_cents(doc)
     return {
         "id": data["id"],
         "staff_id": data["staff_id"],
         "date": data["date"],
         "tier_threshold": data["tier_threshold"],
-        "amount": data["amount"],
+        "amount": from_cents(cents),
         "valid_count_at_claim": data["valid_count_at_claim"],
         "status": data["status"],
         "created_at": data["created_at"],
@@ -134,12 +136,13 @@ def serialize_bonus_record(doc: dict) -> dict:
 
 def serialize_bonus_settlement(doc: dict) -> dict:
     data = to_str_id(doc)
+    cents = read_cents(doc, cents_key="total_bonus_cents", legacy_key="total_bonus")
     return {
         "id": data["id"],
         "staff_id": data["staff_id"],
         "date": data["date"],
         "total_valid": data["total_valid"],
-        "total_bonus": data["total_bonus"],
+        "total_bonus": from_cents(cents),
         "created_at": data["created_at"],
     }
 
@@ -298,8 +301,8 @@ async def claim_promoter_bonus(
     except DuplicateKeyError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="already_claimed") from exc
 
-    amount = float(record["amount"])
-    await create_bonus_commission_log(db, current_staff, record["_id"], amount, now)
+    amount_cents = int(record.get("amount_cents") or to_cents(record.get("amount")))
+    await create_bonus_commission_log(db, current_staff, record["_id"], amount_cents, now)
     return BonusClaimResponse.model_validate(serialize_bonus_record(record))
 
 

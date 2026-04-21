@@ -4,6 +4,8 @@ import time
 
 from pymongo.errors import DuplicateKeyError
 
+from app.utils.money import apply_rate_cents, from_cents, read_cents, to_cents
+
 
 async def get_setting(db, key: str, default=None):
     doc = await db.system_settings.find_one({"key": key})
@@ -21,12 +23,13 @@ async def create_commission_log(
     source_staff_id,
     beneficiary_staff_id,
     level: int,
-    amount: float,
+    amount_cents: int,
     rate: float,
     vip_level: int,
     campaign_id,
 ):
     now = datetime.now(timezone.utc)
+    amount_cents = int(amount_cents)
     log = {
         "commission_no": generate_commission_no(),
         "claim_id": claim_id,
@@ -34,7 +37,8 @@ async def create_commission_log(
         "beneficiary_staff_id": beneficiary_staff_id,
         "level": level,
         "type": "direct",
-        "amount": amount,
+        "amount": from_cents(amount_cents),
+        "amount_cents": amount_cents,
         "rate": rate,
         "vip_level_at_time": vip_level,
         "currency": "PHP",
@@ -48,7 +52,10 @@ async def create_commission_log(
         return
     await db.staff_users.update_one(
         {"_id": beneficiary_staff_id},
-        {"$inc": {"stats.total_commission": amount}},
+        {"$inc": {
+            "stats.total_commission": from_cents(amount_cents),
+            "stats.total_commission_cents": amount_cents,
+        }},
     )
 
 
@@ -62,13 +69,14 @@ async def calculate_commissions(db, staff_doc, claim_id, campaign_id):
         4: "commission_svip",
     }.get(vip_level, "commission_svip")
     level1_rate = float(await get_setting(db, level1_key, 1.0))
+    level1_cents = to_cents(level1_rate)
     await create_commission_log(
         db,
         claim_id=claim_id,
         source_staff_id=staff_doc["_id"],
         beneficiary_staff_id=staff_doc["_id"],
         level=1,
-        amount=level1_rate,
+        amount_cents=level1_cents,
         rate=level1_rate,
         vip_level=vip_level,
         campaign_id=campaign_id,
@@ -85,7 +93,7 @@ async def calculate_commissions(db, staff_doc, claim_id, campaign_id):
                 source_staff_id=staff_doc["_id"],
                 beneficiary_staff_id=relation1["ancestor_id"],
                 level=2,
-                amount=rate,
+                amount_cents=to_cents(rate),
                 rate=rate,
                 vip_level=int(ancestor.get("vip_level", 0)),
                 campaign_id=campaign_id,
@@ -102,16 +110,19 @@ async def calculate_commissions(db, staff_doc, claim_id, campaign_id):
                 source_staff_id=staff_doc["_id"],
                 beneficiary_staff_id=relation2["ancestor_id"],
                 level=3,
-                amount=rate,
+                amount_cents=to_cents(rate),
                 rate=rate,
                 vip_level=int(ancestor.get("vip_level", 0)),
                 campaign_id=campaign_id,
             )
 
-    total = 0.0
+    total_cents = 0
     async for log in db.commission_logs.find({"claim_id": claim_id}):
-        total += float(log.get("amount", 0.0))
+        total_cents += read_cents(log)
     await db.claims.update_one(
         {"_id": claim_id},
-        {"$set": {"commission_amount": total}},
+        {"$set": {
+            "commission_amount": from_cents(total_cents),
+            "commission_amount_cents": total_cents,
+        }},
     )

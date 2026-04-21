@@ -10,8 +10,10 @@ from app.services.withdrawals import (
     fetch_withdrawal_page,
     get_withdrawal_or_404,
     log_finance_action,
+    sum_amount_cents,
 )
 from app.utils.helpers import to_str_id, to_str_ids
+from app.utils.money import from_cents, read_cents, to_cents
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
 
@@ -27,37 +29,69 @@ def unpaid_settlement_filter() -> dict:
     return {"$or": [{"settlement_status": "unpaid"}, {"settlement_status": {"$exists": False}}]}
 
 
+def serialize_commission_log(doc: dict) -> dict:
+    data = to_str_id(doc)
+    data["amount"] = from_cents(read_cents(doc))
+    data.pop("amount_cents", None)
+    return data
+
+
+def serialize_finance_log(doc: dict) -> dict:
+    data = to_str_id(doc)
+    cents = read_cents(doc, cents_key="amount_change_cents", legacy_key="amount_change")
+    data["amount_change"] = from_cents(cents)
+    data.pop("amount_change_cents", None)
+    return data
+
+
 async def sum_claim_commission(db: AsyncIOMotorDatabase, query: dict) -> float:
-    total = 0.0
+    total_cents = 0
     async for claim in db.claims.find(query):
-        total += await claim_commission_amount(db, claim)
-    return total
+        total_cents += await claim_commission_amount_cents(db, claim)
+    return from_cents(total_cents)
 
 
 async def claim_commission_amount(db: AsyncIOMotorDatabase, claim: dict) -> float:
+    return from_cents(await claim_commission_amount_cents(db, claim))
+
+
+async def claim_commission_amount_cents(db: AsyncIOMotorDatabase, claim: dict) -> int:
+    cents_val = claim.get("commission_amount_cents")
+    if cents_val is not None:
+        try:
+            return int(cents_val)
+        except (TypeError, ValueError):
+            pass
     commission_amount = claim.get("commission_amount")
     if commission_amount is not None:
-        return float(commission_amount or 0)
+        return to_cents(commission_amount)
     pipeline = [
         {"$match": {"claim_id": claim["_id"]}},
-        {"$group": {"_id": None, "t": {"$sum": "$amount"}}},
+        {"$group": {"_id": None, "t": {"$sum": "$amount_cents"}}},
     ]
     result = await db.commission_logs.aggregate(pipeline).to_list(length=1)
-    return float(result[0]["t"]) if result else 0.0
+    if not result:
+        return 0
+    try:
+        return int(result[0]["t"])
+    except (TypeError, ValueError):
+        return 0
 
 
 @router.get("/overview")
 async def overview(db: AsyncIOMotorDatabase = Depends(get_db)):
     async def sum_by_status(st):
-        p = [{"$match": {"status": st}}, {"$group": {"_id": None, "t": {"$sum": "$amount"}}}]
-        r = await db.commission_logs.aggregate(p).to_list(length=1)
-        return r[0]["t"] if r else 0
+        return await sum_amount_cents(db.commission_logs, {"status": st})
+    paid_cents = await sum_by_status("paid")
+    pending_cents = await sum_by_status("pending")
+    approved_cents = await sum_by_status("approved")
+    frozen_cents = await sum_by_status("frozen")
     return {
-        "total_commission": await sum_by_status("paid") + await sum_by_status("pending") + await sum_by_status("approved"),
-        "total_paid": await sum_by_status("paid"),
-        "total_pending": await sum_by_status("pending"),
-        "total_approved": await sum_by_status("approved"),
-        "total_frozen": await sum_by_status("frozen"),
+        "total_commission": from_cents(paid_cents + pending_cents + approved_cents),
+        "total_paid": from_cents(paid_cents),
+        "total_pending": from_cents(pending_cents),
+        "total_approved": from_cents(approved_cents),
+        "total_frozen": from_cents(frozen_cents),
         "settlement_pending": await sum_claim_commission(db, unpaid_settlement_filter()),
         "settlement_paid": await sum_claim_commission(db, {"settlement_status": "paid"}),
         "staff_count": await db.staff_users.count_documents({"status": "active"}),
@@ -75,16 +109,21 @@ async def staff_performance(
     result = []
     for s in items:
         sid = s["_id"]
-        paid_p = [{"$match": {"beneficiary_staff_id": sid, "status": "paid"}}, {"$group": {"_id": None, "t": {"$sum": "$amount"}}}]
-        pending_p = [{"$match": {"beneficiary_staff_id": sid, "status": {"$in": ["pending", "approved"]}}}, {"$group": {"_id": None, "t": {"$sum": "$amount"}}}]
-        paid_r = await db.commission_logs.aggregate(paid_p).to_list(length=1)
-        pending_r = await db.commission_logs.aggregate(pending_p).to_list(length=1)
-        bonus_p = [{"$match": {"beneficiary_staff_id": sid, "type": "bonus"}}, {"$group": {"_id": None, "t": {"$sum": "$amount"}}}]
-        bonus_r = await db.commission_logs.aggregate(bonus_p).to_list(length=1)
+        paid_cents = await sum_amount_cents(db.commission_logs, {"beneficiary_staff_id": sid, "status": "paid"})
+        pending_cents = await sum_amount_cents(db.commission_logs, {"beneficiary_staff_id": sid, "status": {"$in": ["pending", "approved"]}})
+        bonus_cents = await sum_amount_cents(db.commission_logs, {"beneficiary_staff_id": sid, "type": "bonus"})
         item = to_str_id(dict(s))
-        item["paid_amount"] = paid_r[0]["t"] if paid_r else 0
-        item["pending_amount"] = pending_r[0]["t"] if pending_r else 0
-        item["total_bonus"] = bonus_r[0]["t"] if bonus_r else 0
+        item["paid_amount"] = from_cents(paid_cents)
+        item["pending_amount"] = from_cents(pending_cents)
+        item["total_bonus"] = from_cents(bonus_cents)
+        # Expose stats.total_commission_cents as the legacy float for UI compatibility.
+        stats = dict(item.get("stats") or {})
+        stats_cents = stats.get("total_commission_cents")
+        if stats_cents is None:
+            stats_cents = to_cents(stats.get("total_commission", 0))
+        stats["total_commission"] = from_cents(int(stats_cents))
+        stats["total_commission_cents"] = int(stats_cents)
+        item["stats"] = stats
         item["settlement_pending"] = await sum_claim_commission(
             db,
             {"staff_id": sid, **unpaid_settlement_filter()},
@@ -114,6 +153,7 @@ async def manual_settle(
         raise HTTPException(status_code=400, detail="Invalid amount") from exc
     if not math.isfinite(amount) or amount < 0:
         raise HTTPException(status_code=400, detail="Settlement amount must be greater than or equal to 0")
+    amount_cents = to_cents(amount)
     remark = payload.get("remark", "")
     staff = await db.staff_users.find_one({"_id": staff_id})
     if not staff:
@@ -124,15 +164,17 @@ async def manual_settle(
     ).sort("created_at", 1).to_list(length=100000)
 
     settle_claim_ids: list[ObjectId] = []
-    settled_amount = 0.0
+    settled_cents = 0
     for claim in claims:
-        claim_amount = await claim_commission_amount(db, claim)
         settle_claim_ids.append(claim["_id"])
-        settled_amount += claim_amount
+        settled_cents += await claim_commission_amount_cents(db, claim)
 
-    if amount > settled_amount + 1e-9:
-        raise HTTPException(status_code=400, detail=f"Settlement amount {amount} exceeds approved balance {settled_amount}")
-    if abs(amount - settled_amount) > 1e-9:
+    if amount_cents > settled_cents:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Settlement amount {amount} exceeds approved balance {from_cents(settled_cents)}",
+        )
+    if amount_cents != settled_cents:
         raise HTTPException(status_code=400, detail="Settlement amount must match full approved commission records")
     if not settle_claim_ids:
         raise HTTPException(status_code=400, detail="No approved commission records to settle")
@@ -172,7 +214,7 @@ async def manual_settle(
         target_id=staff_id,
         old_status="unpaid",
         new_status="paid",
-        amount=round(settled_amount, 2),
+        amount=from_cents(settled_cents),
         remark=remark,
     )
     return MessageResponse(message=f"Settled {len(settle_claim_ids)} claim records")
@@ -190,7 +232,7 @@ async def settlement_records(
     cursor = db.commission_logs.find(query).sort("paid_at", -1).skip((page - 1) * page_size).limit(page_size)
     items = await cursor.to_list(length=page_size)
     total = await db.commission_logs.count_documents(query)
-    return PageResponse(items=to_str_ids(items), total=total, page=page, page_size=page_size,
+    return PageResponse(items=[serialize_commission_log(item) for item in items], total=total, page=page, page_size=page_size,
                         pages=math.ceil(total / page_size) if total else 0)
 
 
@@ -202,7 +244,7 @@ async def finance_logs(
     cursor = db.finance_action_logs.find().sort("created_at", -1).skip((page - 1) * page_size).limit(page_size)
     items = await cursor.to_list(length=page_size)
     total = await db.finance_action_logs.count_documents({})
-    return PageResponse(items=to_str_ids(items), total=total, page=page, page_size=page_size,
+    return PageResponse(items=[serialize_finance_log(item) for item in items], total=total, page=page, page_size=page_size,
                         pages=math.ceil(total / page_size) if total else 0)
 
 
@@ -232,7 +274,7 @@ async def approve_commission(
         target_id=oid,
         old_status="pending",
         new_status="approved",
-        amount=float(commission.get("amount", 0)),
+        amount=from_cents(read_cents(commission)),
         remark="",
     )
     return MessageResponse(message="Commission approved")
@@ -266,7 +308,7 @@ async def reject_commission(
         target_id=oid,
         old_status="pending",
         new_status="rejected",
-        amount=float(commission.get("amount", 0)),
+        amount=from_cents(read_cents(commission)),
         remark=reason,
     )
     return MessageResponse(message="Commission rejected")
@@ -294,7 +336,7 @@ async def commissions(
     cursor = db.commission_logs.find(query).sort("created_at", -1).skip((page - 1) * page_size).limit(page_size)
     items = await cursor.to_list(length=page_size)
     total = await db.commission_logs.count_documents(query)
-    return PageResponse(items=to_str_ids(items), total=total, page=page, page_size=page_size,
+    return PageResponse(items=[serialize_commission_log(item) for item in items], total=total, page=page, page_size=page_size,
                         pages=math.ceil(total / page_size) if total else 0)
 
 
@@ -332,7 +374,7 @@ async def approve_withdrawal(
         raise HTTPException(status_code=409, detail="Withdrawal status changed, please retry")
     await log_finance_action(
         db, admin=admin, action="approve", target_type="withdrawal", target_id=oid,
-        old_status="pending", new_status="approved", amount=float(withdrawal.get("amount", 0)), remark=""
+        old_status="pending", new_status="approved", amount=from_cents(read_cents(withdrawal)), remark=""
     )
     return MessageResponse(message="Withdrawal request approved")
 
@@ -359,7 +401,7 @@ async def reject_withdrawal(
         raise HTTPException(status_code=409, detail="Withdrawal status changed, please retry")
     await log_finance_action(
         db, admin=admin, action="reject", target_type="withdrawal", target_id=oid,
-        old_status="pending", new_status="rejected", amount=float(withdrawal.get("amount", 0)), remark=reason
+        old_status="pending", new_status="rejected", amount=from_cents(read_cents(withdrawal)), remark=reason
     )
     return MessageResponse(message="Withdrawal request rejected")
 
@@ -387,6 +429,6 @@ async def complete_withdrawal(
         raise HTTPException(status_code=409, detail="Withdrawal status changed, please retry")
     await log_finance_action(
         db, admin=admin, action="complete", target_type="withdrawal", target_id=oid,
-        old_status="approved", new_status="paid", amount=float(withdrawal.get("amount", 0)), remark=remark or transaction_no
+        old_status="approved", new_status="paid", amount=from_cents(read_cents(withdrawal)), remark=remark or transaction_no
     )
     return MessageResponse(message="Withdrawal request completed")

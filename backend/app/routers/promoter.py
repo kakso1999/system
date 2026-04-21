@@ -12,11 +12,13 @@ from app.services.withdrawals import (
     fetch_withdrawal_page,
     get_payout_account_or_404,
     get_withdrawal_balance_snapshot,
+    sum_amount_cents,
 )
 from app.utils.datetime import get_day_start_utc
 from app.schemas.staff import WorkPauseRequest
 from app.utils.helpers import to_str_id, to_str_ids
 from app.utils.live_token import generate_pin, generate_token_signature
+from app.utils.money import from_cents, to_cents
 
 router = APIRouter()
 
@@ -51,6 +53,22 @@ async def calculate_team_total(db, staff_id: ObjectId, own_total: int) -> int:
     return total
 
 
+def serialize_promoter_commission(doc: dict) -> dict:
+    item = to_str_id(doc)
+    cents = item.pop("amount_cents", None)
+    if cents is not None:
+        item["amount"] = from_cents(int(cents))
+    return item
+
+
+def serialize_team_reward(doc: dict) -> dict:
+    item = to_str_id(doc)
+    cents = item.pop("amount_cents", None)
+    if cents is not None:
+        item["amount"] = from_cents(int(cents))
+    return item
+
+
 @router.get("/home")
 async def home(
     current_staff: dict = Depends(get_current_staff),
@@ -64,27 +82,28 @@ async def home(
 
     pipeline = [
         {"$match": {"beneficiary_staff_id": sid, "created_at": {"$gte": today_start}}},
-        {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
+        {"$group": {"_id": None, "total": {"$sum": "$amount_cents"}}},
     ]
     agg = await db.commission_logs.aggregate(pipeline).to_list(length=1)
-    today_commission = agg[0]["total"] if agg else 0
+    today_commission_cents = int(agg[0]["total"]) if agg and agg[0].get("total") is not None else 0
+    today_commission = from_cents(today_commission_cents)
 
-    settled = 0
-    pending = 0
-    available = 0
-    for st, field in [("paid", "settled"), ("pending", "pending"), ("approved", "available")]:
-        p = [{"$match": {"beneficiary_staff_id": sid, "status": st}}, {"$group": {"_id": None, "t": {"$sum": "$amount"}}}]
-        r = await db.commission_logs.aggregate(p).to_list(length=1)
-        val = r[0]["t"] if r else 0
-        if field == "settled":
-            settled = val
-        elif field == "pending":
-            pending = val
-        else:
-            available = val
+    settled_cents = await sum_amount_cents(db.commission_logs, {"beneficiary_staff_id": sid, "status": "paid"})
+    pending_cents = await sum_amount_cents(db.commission_logs, {"beneficiary_staff_id": sid, "status": "pending"})
+    available_cents = await sum_amount_cents(db.commission_logs, {"beneficiary_staff_id": sid, "status": "approved"})
+    settled = from_cents(settled_cents)
+    pending = from_cents(pending_cents)
+    available = from_cents(available_cents)
 
     s = to_str_id(dict(staff))
     s.pop("password_hash", None)
+    stats = dict(s.get("stats") or {})
+    stats_cents = stats.get("total_commission_cents")
+    if stats_cents is None:
+        stats_cents = to_cents(stats.get("total_commission", 0))
+    stats["total_commission"] = from_cents(int(stats_cents))
+    stats["total_commission_cents"] = int(stats_cents)
+    s["stats"] = stats
     for k in ("parent_id", "campaign_id"):
         if isinstance(s.get(k), ObjectId):
             s[k] = str(s[k])
@@ -149,8 +168,7 @@ async def commission(
     cursor = db.commission_logs.find(query).sort("created_at", -1).skip((page - 1) * page_size).limit(page_size)
     items = await cursor.to_list(length=page_size)
     total = await db.commission_logs.count_documents(query)
-    from app.utils.helpers import to_str_ids
-    return {"items": to_str_ids(items), "total": total, "page": page, "page_size": page_size,
+    return {"items": [serialize_promoter_commission(item) for item in items], "total": total, "page": page, "page_size": page_size,
             "pages": math.ceil(total / page_size) if total else 0}
 
 
@@ -324,15 +342,17 @@ async def team_rewards(
     milestones = []
     for key in ("team_reward_100", "team_reward_1000", "team_reward_10000"):
         threshold = int(await get_setting(db, f"{key}_threshold", 0))
-        amount = float(await get_setting(db, key, 0))
+        raw_amount = await get_setting(db, key, 0)
+        cents = to_cents(raw_amount)
         awarded = reward_map.get(key)
         milestones.append({
             "threshold": threshold,
-            "amount": amount,
+            "amount": from_cents(cents),
+            "amount_cents": cents,
             "awarded": bool(awarded),
             "awarded_at": awarded["created_at"].isoformat() if awarded else None,
         })
-    return {"team_total": team_total, "milestones": milestones, "rewards": to_str_ids(reward_items)}
+    return {"team_total": team_total, "milestones": milestones, "rewards": [serialize_team_reward(item) for item in reward_items]}
 
 
 async def _enforce_live_qr_rate_limit(db: AsyncIOMotorDatabase, staff_id: ObjectId, now: datetime) -> None:

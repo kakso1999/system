@@ -6,16 +6,25 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.config import get_settings
 from app.services.commission import generate_commission_no
+from app.utils.money import from_cents, read_cents, to_cents
 
 
 def sorted_tiers(tiers: list[dict]) -> list[dict]:
-    normalized = [
-        {
+    normalized = []
+    for tier in tiers:
+        raw_cents = tier.get("amount_cents")
+        if raw_cents is None:
+            cents = to_cents(tier.get("amount"))
+        else:
+            try:
+                cents = int(raw_cents)
+            except (TypeError, ValueError):
+                cents = to_cents(tier.get("amount"))
+        normalized.append({
             "threshold": int(tier["threshold"]),
-            "amount": float(tier["amount"]),
-        }
-        for tier in tiers
-    ]
+            "amount": from_cents(cents),
+            "amount_cents": cents,
+        })
     return sorted(normalized, key=lambda tier: tier["threshold"])
 
 
@@ -82,11 +91,13 @@ def build_today_tiers(tiers: list[dict], valid_count: int, claims: list[dict]) -
     items = []
     for tier in sorted_tiers(tiers):
         threshold = int(tier["threshold"])
+        cents = int(tier["amount_cents"])
         is_claimed = threshold in claimed
         reached = valid_count >= threshold
         items.append({
             "threshold": threshold,
-            "amount": float(tier["amount"]),
+            "amount": from_cents(cents),
+            "amount_cents": cents,
             "reached": reached,
             "claimed": is_claimed,
             "claimable": reached and not is_claimed,
@@ -97,9 +108,11 @@ def build_today_tiers(tiers: list[dict], valid_count: int, claims: list[dict]) -
 def build_claimed_today_tiers(claims: list[dict]) -> list[dict]:
     items = []
     for record in sorted(claims, key=lambda item: int(item.get("tier_threshold", 0))):
+        cents = read_cents(record)
         items.append({
             "threshold": int(record["tier_threshold"]),
-            "amount": float(record.get("amount", 0.0)),
+            "amount": from_cents(cents),
+            "amount_cents": cents,
             "reached": True,
             "claimed": True,
             "claimable": False,
@@ -115,7 +128,7 @@ async def get_today_bonus_progress(db, staff_id) -> dict:
         "created_at": {"$gte": start, "$lt": end},
     })
     claims = await list_today_claimed(db, staff_id)
-    total_earned_today = sum(float(record.get("amount", 0)) for record in claims)
+    total_earned_cents = sum(read_cents(record) for record in claims)
     rule = await get_active_rule(db, staff_id)
     if rule is None:
         return {
@@ -123,14 +136,14 @@ async def get_today_bonus_progress(db, staff_id) -> dict:
             "valid_count": valid_count,
             "rule": None,
             "tiers": build_claimed_today_tiers(claims),
-            "total_earned_today": total_earned_today,
+            "total_earned_today": from_cents(total_earned_cents),
         }
     return {
         "date": date_str,
         "valid_count": valid_count,
         "rule": serialize_today_rule(rule),
         "tiers": build_today_tiers(rule.get("tiers", []), valid_count, claims),
-        "total_earned_today": total_earned_today,
+        "total_earned_today": from_cents(total_earned_cents),
     }
 
 
@@ -163,11 +176,13 @@ async def insert_bonus_claim_record(
 ) -> dict:
     rule_snapshot = dict(rule)
     rule_snapshot["tiers"] = sorted_tiers(rule.get("tiers", []))
+    cents = int(tier.get("amount_cents") or to_cents(tier.get("amount")))
     doc = {
         "staff_id": staff_id,
         "date": date_str,
         "tier_threshold": int(tier["threshold"]),
-        "amount": float(tier["amount"]),
+        "amount": from_cents(cents),
+        "amount_cents": cents,
         "valid_count_at_claim": valid_count,
         "status": "claimed",
         "rule_snapshot": rule_snapshot,
@@ -182,9 +197,10 @@ async def create_bonus_commission_log(
     db,
     staff: dict,
     bonus_record_id: ObjectId,
-    amount: float,
+    amount_cents: int,
     now: datetime,
 ) -> None:
+    amount_cents = int(amount_cents)
     await db.commission_logs.insert_one({
         "commission_no": generate_commission_no(),
         "claim_id": None,
@@ -193,7 +209,8 @@ async def create_bonus_commission_log(
         "beneficiary_staff_id": staff["_id"],
         "level": 0,
         "type": "bonus",
-        "amount": amount,
+        "amount": from_cents(amount_cents),
+        "amount_cents": amount_cents,
         "rate": 0.0,
         "vip_level_at_time": int(staff.get("vip_level", 0) or 0),
         "currency": "PHP",
@@ -203,5 +220,8 @@ async def create_bonus_commission_log(
     })
     await db.staff_users.update_one(
         {"_id": staff["_id"]},
-        {"$inc": {"stats.total_commission": amount}},
+        {"$inc": {
+            "stats.total_commission": from_cents(amount_cents),
+            "stats.total_commission_cents": amount_cents,
+        }},
     )

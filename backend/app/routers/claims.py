@@ -9,6 +9,7 @@ from app.dependencies import get_current_admin
 from app.schemas.common import PageResponse
 from app.services.withdrawals import log_finance_action
 from app.utils.helpers import to_str_id
+from app.utils.money import from_cents, read_cents
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
 
@@ -16,7 +17,9 @@ router = APIRouter(dependencies=[Depends(get_current_admin)])
 def serialize_claim(doc: dict) -> dict:
     data = to_str_id(doc)
     data["settlement_status"] = data.get("settlement_status") or "unpaid"
-    data["commission_amount"] = float(data.get("commission_amount", 0) or 0)
+    cents = read_cents(doc, cents_key="commission_amount_cents", legacy_key="commission_amount")
+    data["commission_amount"] = from_cents(cents)
+    data["commission_amount_cents"] = int(cents)
     data["settled_at"] = data.get("settled_at")
     for k in ("campaign_id", "staff_id", "wheel_item_id", "reward_code_id"):
         if isinstance(data.get(k), ObjectId):
@@ -127,7 +130,7 @@ async def cancel_claim(
         target_id=oid,
         old_status=normalized_settlement_status(claim),
         new_status="cancelled",
-        amount=float(updated.get("commission_amount", 0) or 0),
+        amount=from_cents(read_cents(updated, cents_key="commission_amount_cents", legacy_key="commission_amount")),
         remark=reason,
     )
     return settlement_response(updated)
@@ -160,7 +163,7 @@ async def freeze_claim(
         target_id=oid,
         old_status="unpaid",
         new_status="frozen",
-        amount=float(updated.get("commission_amount", 0) or 0),
+        amount=from_cents(read_cents(updated, cents_key="commission_amount_cents", legacy_key="commission_amount")),
         remark="",
     )
     return settlement_response(updated)
@@ -193,7 +196,7 @@ async def unfreeze_claim(
         target_id=oid,
         old_status="frozen",
         new_status="unpaid",
-        amount=float(updated.get("commission_amount", 0) or 0),
+        amount=from_cents(read_cents(updated, cents_key="commission_amount_cents", legacy_key="commission_amount")),
         remark="",
     )
     return settlement_response(updated)
