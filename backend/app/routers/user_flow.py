@@ -105,7 +105,13 @@ async def check_risk(db, phone, ip, device_fp, campaign_id) -> list[dict]:
     return hits
 
 
-async def _require_active_session(db, session_token: str | None, staff_oid, mismatch_code: str = "session_required"):
+async def _require_active_session(
+    db,
+    session_token: str | None,
+    staff_oid,
+    mismatch_code: str = "session_required",
+    campaign_oid=None,
+):
     if not session_token:
         raise HTTPException(status_code=403, detail={"code": "session_required"})
     now = datetime.now(timezone.utc)
@@ -120,6 +126,8 @@ async def _require_active_session(db, session_token: str | None, staff_oid, mism
     if not exp or exp <= now:
         raise HTTPException(status_code=403, detail={"code": "session_required"})
     if session.get("staff_id") != staff_oid:
+        raise HTTPException(status_code=403, detail={"code": mismatch_code})
+    if campaign_oid is not None and session.get("campaign_id") != campaign_oid:
         raise HTTPException(status_code=403, detail={"code": mismatch_code})
     return session
 
@@ -198,7 +206,7 @@ async def welcome(
     if not campaign:
         raise HTTPException(status_code=404, detail="No active campaign")
     if await get_setting(db, "live_qr_enabled"):
-        await _require_active_session(db, effective_session_token, staff["_id"])
+        await _require_active_session(db, effective_session_token, staff["_id"], campaign_oid=campaign["_id"])
 
     await db.staff_users.update_one({"_id": staff["_id"]}, {"$inc": {"stats.total_scans": 1}})
     await db.scan_logs.insert_one({
@@ -250,7 +258,7 @@ async def spin(
     if staff.get("campaign_id") != campaign["_id"]:
         raise HTTPException(status_code=400, detail="Campaign does not match promoter")
     if await get_setting(db, "live_qr_enabled"):
-        await _require_active_session(db, session_token_header, staff["_id"])
+        await _require_active_session(db, session_token_header, staff["_id"], campaign_oid=cid)
     items = await db.wheel_items.find(
         {"campaign_id": cid, "enabled": True}
     ).sort("sort_order", 1).to_list(length=50)
@@ -381,6 +389,24 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
                        "otp_ip_rate_limit", f"IP {ip} too many OTP requests")
         return {"verified": False, "message": "Too many requests from this network."}
 
+    # M4: Atomic per-phone/per-bucket reservation to prevent concurrent-request race.
+    bucket = int(now.timestamp()) // max(1, cooldown_sec)
+    existing = await db.otp_reservations.find_one_and_update(
+        {"phone": phone, "bucket": bucket},
+        {"$setOnInsert": {
+            "created_at": now,
+            "phone": phone,
+            "bucket": bucket,
+            "expires_at": now + timedelta(seconds=max(60, cooldown_sec * 2)),
+        }},
+        upsert=True,
+        return_document=ReturnDocument.BEFORE,
+    )
+    if existing is not None:
+        await log_risk(db, campaign_id, phone, ip, "",
+                       "otp_cooldown", f"Phone {phone[-4:]} concurrent reserve blocked")
+        return {"verified": False, "message": "Please wait before requesting another code."}
+
     # Generate 6-digit OTP using cryptographically secure random
     code = str(secrets.randbelow(900000) + 100000)
 
@@ -491,7 +517,7 @@ async def complete(
     if await get_setting(db, "live_qr_enabled"):
         if not str(payload.get("device_fingerprint", "")).strip():
             raise HTTPException(status_code=403, detail={"code": "device_fingerprint_required"})
-        session = await _require_active_session(db, session_token_header, staff["_id"])
+        session = await _require_active_session(db, session_token_header, staff["_id"], campaign_oid=cid)
         if session.get("device_fingerprint", "") != payload.get("device_fingerprint", ""):
             raise HTTPException(status_code=403, detail={"code": "session_device_mismatch"})
 
