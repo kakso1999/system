@@ -13,6 +13,8 @@ interface HomeData {
   staff: {
     id: string; name: string; staff_no: string; vip_level: number;
     invite_code: string; stats: { total_scans: number; total_valid: number; total_commission: number; team_size: number; level1_count: number; level2_count: number; level3_count: number };
+    status?: "active" | "disabled" | "pending_review";
+    risk_frozen?: boolean;
     work_status?: WorkStatus;
     promotion_paused?: boolean; pause_reason?: string;
     paused_at?: string | null; resumed_at?: string | null;
@@ -40,6 +42,15 @@ interface BonusTodaySummary {
   rule: { enabled: boolean } | null;
   tiers: Array<{ threshold: number; amount: number; claimable: boolean; claimed: boolean }>;
   total_earned_today: number;
+}
+
+interface RecentClaimItem {
+  id: string;
+  phone_masked: string;
+  prize_type: string;
+  reward_code: string;
+  settlement_status: string;
+  created_at: string;
 }
 
 function toPoints(value: number) {
@@ -78,6 +89,7 @@ function getApiDetail(error: unknown) {
 
 type WorkStatusCardProps = {
   staff: HomeData["staff"]; workStatus: WorkStatus; submitting: WorkAction | null; workError: string;
+  disabled: boolean;
   onAction: (action: WorkAction) => void | Promise<void>; onOpenPause: () => void;
 };
 
@@ -85,8 +97,14 @@ const primaryWorkButton = "flex flex-1 items-center justify-center gap-2 rounded
 const pauseWorkButton = "flex flex-1 items-center justify-center gap-2 rounded-full bg-surface-container-low px-5 py-3 font-bold text-primary transition-all active:scale-[0.98] disabled:opacity-60";
 const outlineWorkButton = "flex flex-1 items-center justify-center gap-2 rounded-full border border-outline-variant px-5 py-3 font-bold text-on-surface-variant transition-all active:scale-[0.98] disabled:opacity-60";
 
-const WorkStatusControls = ({ workStatus, submitting, onAction, onOpenPause }: Omit<WorkStatusCardProps, "staff" | "workError">) => {
-  const disabled = !!submitting;
+const WorkStatusControls = ({
+  workStatus,
+  submitting,
+  disabled: controlsDisabled,
+  onAction,
+  onOpenPause,
+}: Omit<WorkStatusCardProps, "staff" | "workError">) => {
+  const disabled = !!submitting || controlsDisabled;
   if (workStatus === "stopped") {
     return (
       <button onClick={() => onAction("start")} disabled={disabled} className={primaryWorkButton.replace("flex-1", "w-full")}>
@@ -132,7 +150,7 @@ const WorkStatusCard = (props: WorkStatusCardProps) => {
       </div>
       {details}
       <div className="flex gap-3">
-        <WorkStatusControls workStatus={props.workStatus} submitting={props.submitting}
+        <WorkStatusControls workStatus={props.workStatus} submitting={props.submitting} disabled={props.disabled}
           onAction={props.onAction} onOpenPause={props.onOpenPause} />
       </div>
       {props.workError && <p className="text-sm font-semibold text-error">{props.workError}</p>}
@@ -316,6 +334,7 @@ export default function PromoterHomePage() {
   const [showPauseModal, setShowPauseModal] = useState(false);
   const [pauseReason, setPauseReason] = useState("");
   const [bonusToday, setBonusToday] = useState<BonusTodaySummary | null>(null);
+  const [recentClaims, setRecentClaims] = useState<RecentClaimItem[]>([]);
 
   useEffect(() => { loadHome(); }, []);
 
@@ -343,12 +362,16 @@ export default function PromoterHomePage() {
 
   const loadHome = async () => {
     try {
-      const [res, bonusRes] = await Promise.all([
+      const [res, bonusRes, recentClaimsRes] = await Promise.all([
         api.get<HomeData>("/api/promoter/home"),
         api.get<BonusTodaySummary>("/api/promoter/bonus/today").catch(() => null),
+        api.get<{ items: RecentClaimItem[] }>("/api/promoter/recent-claims?limit=10")
+          .then((response) => response.data.items)
+          .catch(() => []),
       ]);
       setData(res.data);
       setBonusToday(bonusRes?.data || null);
+      setRecentClaims(recentClaimsRes);
       try {
         const vipRes = await api.get("/api/promoter/vip-progress");
         setVipProgress(normalizeVipProgress(vipRes.data, res.data.staff));
@@ -385,7 +408,7 @@ export default function PromoterHomePage() {
       if (detail === "invalid_transition") {
         setShowPauseModal(false);
         setPauseReason("");
-        setWorkError("State changed — refreshing…");
+        setWorkError("State changed; refreshing...");
         await loadHome();
       } else {
         setWorkError("Action failed. Please try again.");
@@ -403,6 +426,8 @@ export default function PromoterHomePage() {
   const vip = vipProgress ?? getDefaultVipProgress(s);
   const nextLabel = vip.next_level !== null ? VIP_LABELS[vip.next_level] : "Max";
   const workStatus = getWorkStatus(s.work_status);
+  const staffStatus = s.status ?? "active";
+  const isBlocked = staffStatus !== "active" || s.risk_frozen === true;
 
   return (
     <div className="min-h-screen bg-surface">
@@ -428,7 +453,19 @@ export default function PromoterHomePage() {
           <h2 className="text-3xl font-extrabold font-[var(--font-headline)] tracking-tight mt-1">My Performance</h2>
         </section>
 
-        <WorkStatusCard staff={s} workStatus={workStatus} submitting={submitting} workError={workError}
+        {isBlocked && (
+          <div className="rounded-xl border-2 border-error bg-error-container/20 p-4">
+            <p className="text-sm font-bold text-error">
+              {s.risk_frozen
+                ? "Your account has been frozen by risk control. Contact admin."
+                : staffStatus === "disabled"
+                  ? "Your account is disabled. Contact admin to re-enable."
+                  : "Your account is pending review. You cannot promote yet."}
+            </p>
+          </div>
+        )}
+
+        <WorkStatusCard staff={s} workStatus={workStatus} submitting={submitting} workError={workError} disabled={isBlocked}
           onAction={handleWorkAction} onOpenPause={() => { setWorkError(""); setShowPauseModal(true); }} />
 
         <section className="bg-surface-container-lowest rounded-xl shadow-sm p-6 space-y-4">
@@ -456,6 +493,25 @@ export default function PromoterHomePage() {
         </section>
 
         <BonusSprintCard bonus={bonusToday} onOpen={openBonusSprint} />
+
+        <section className="bg-surface-container-lowest rounded-xl shadow-sm p-6 space-y-3">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-on-surface-variant">Recent Claims</h3>
+          {recentClaims.length === 0 ? (
+            <p className="text-sm text-on-surface-variant">No claims yet.</p>
+          ) : (
+            <ul className="divide-y divide-outline-variant/40">
+              {recentClaims.map((r) => (
+                <li key={r.id} className="flex items-center justify-between py-2">
+                  <div>
+                    <p className="text-sm font-semibold">{r.phone_masked}</p>
+                    <p className="text-xs text-on-surface-variant">{r.prize_type}{r.reward_code ? ` - ${r.reward_code}` : ""}</p>
+                  </div>
+                  <span className="text-xs text-on-surface-variant">{new Date(r.created_at).toLocaleString()}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
         {/* Commission Card */}
         <section className="grid grid-cols-2 gap-4">
