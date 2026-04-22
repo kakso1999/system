@@ -180,6 +180,7 @@ app.add_middleware(
 from app.routers import admin_auth, staff_auth, campaigns, wheel, reward_codes, admins
 from app.routers import staff, claims, user_flow, risk_control, settings as settings_router
 from app.routers import promoter, finance, dashboard, external, bonus, registrations, sponsors, public_settings, qr
+from app.routers import promotion_activity
 from app.utils.csrf import require_csrf
 from fastapi import Depends
 
@@ -195,6 +196,7 @@ app.include_router(wheel.router, prefix="/api/admin/wheel-items", tags=["Wheel I
 app.include_router(reward_codes.router, prefix="/api/admin/reward-codes", tags=["Reward Codes"], dependencies=_csrf_guard)
 app.include_router(staff.router, prefix="/api/admin/staff", tags=["Staff Management"], dependencies=_csrf_guard)
 app.include_router(registrations.router, prefix="/api/admin/registrations", tags=["Registrations"], dependencies=_csrf_guard)
+app.include_router(promotion_activity.router, prefix="/api/admin/promotion-activity", tags=["Promotion Activity"], dependencies=_csrf_guard)
 app.include_router(claims.router, prefix="/api/admin/claims", tags=["Claims Records"], dependencies=_csrf_guard)
 app.include_router(risk_control.router, prefix="/api/admin/risk-control", tags=["Risk Control"], dependencies=_csrf_guard)
 app.include_router(settings_router.router, prefix="/api/admin/settings", tags=["System Settings"], dependencies=_csrf_guard)

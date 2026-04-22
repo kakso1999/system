@@ -4,13 +4,14 @@ import { useRouter, usePathname } from "next/navigation";
 import api from "@/lib/api";
 import { clearAuth, isAuthenticated } from "@/lib/auth";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Users, Users2, Megaphone, Receipt, Wallet, Shield, Settings, ChevronLeft, ChevronRight, LogOut, ShieldCheck, UserPlus, Zap, Handshake } from "lucide-react";
+import { LayoutDashboard, Users, Users2, Megaphone, Receipt, Wallet, Shield, Settings, ChevronLeft, ChevronRight, LogOut, ShieldCheck, UserPlus, Zap, Handshake, Activity } from "lucide-react";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
   { label: "地推员管理", icon: Users, href: "/staff" },
   { label: "管理员管理", icon: Users2, href: "/admins" },
   { label: "注册审核", icon: UserPlus, href: "/registrations", badgeKey: "registrations_pending" },
+  { label: "推广记录", icon: Activity, href: "/promotion-activity" },
   { label: "活动管理", icon: Megaphone, href: "/campaigns" },
   { label: "领取记录", icon: Receipt, href: "/claims" },
   { label: "冲单奖励", icon: Zap, href: "/bonus" },
