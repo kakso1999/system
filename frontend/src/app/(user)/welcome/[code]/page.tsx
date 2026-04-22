@@ -84,12 +84,21 @@ export default function WelcomePage() {
 
   const loadWelcome = async () => {
     try {
+      const v = searchParams.get("v");
       const res = await api.get(`/api/claim/welcome/${code}`, {
         headers: token ? { "X-Session-Token": token } : {},
+        params: v !== null ? { v } : undefined,
       });
       setData(res.data);
-    } catch {
-      setError("Activity not found or has ended");
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: { code?: string } | string }; status?: number } };
+      const detail = err.response?.data?.detail;
+      const code = typeof detail === "object" ? detail?.code : undefined;
+      if (code === "qr_version_mismatch") {
+        setError("This QR code has expired. Please scan the latest one.");
+      } else {
+        setError("Activity not found or has ended");
+      }
     }
   };
 

@@ -1,0 +1,62 @@
+{
+  "results": [
+    {
+      "name": "1. admin login -> dashboard",
+      "ok": true,
+      "url": "http://localhost:3000/dashboard",
+      "navCount": 13
+    },
+    {
+      "name": "2. staff register B1",
+      "ok": true,
+      "setRes": 200,
+      "hasConfirm": true,
+      "hasCaptcha": false
+    },
+    {
+      "name": "3. rewards-overview",
+      "ok": true,
+      "snippet": "GroundRewards\nDashboard\n地推员管理\n管理员管理\n注册审核\n推广记录\n活动管理\n奖励视角\n领取记录\n冲单奖励\n赞助商\n财务结算\n风控设置\n系统设置\n收起\n退出登录\n奖励管理视角\n"
+    },
+    {
+      "name": "4. promotion-activity",
+      "ok": true,
+      "snippet": "GroundRewards\nDashboard\n地推员管理\n管理员管理\n注册审核\n推广记录\n活动管理\n奖励视角\n领取记录\n冲单奖励\n赞助商\n财务结算\n风控设置\n系统设置\n收起\n退出登录\n员工推广记录\n"
+    },
+    {
+      "name": "5. finance tabs",
+      "ok": true,
+      "hasCombined": true,
+      "hasRecon": true,
+      "hasExport": true
+    },
+    {
+      "name": "6. campaigns page loads",
+      "ok": true,
+      "url": "http://localhost:3000/campaigns"
+    },
+    {
+      "name": "7a. welcome NFPSSY?v=0",
+      "ok": true,
+      "snippet": "GroundRewards\nEnglish\n中文\nTagalog\nEXCLUSIVE ACCESS\nWelcome!\n12\n\n2\n\nView Prizes\n\nBy proceeding, you ag"
+    },
+    {
+      "name": "7b. welcome ?v=999 should fail",
+      "ok": true,
+      "snippet": "Oops!\n\nThis QR code has expired. Please scan the latest one."
+    },
+    {
+      "name": "8. JWT blacklist",
+      "ok": true,
+      "me1": 200,
+      "logout": 200,
+      "me2": 401
+    }
+  ],
+  "consoleErrs": [
+    {
+      "url": "http://localhost:3000/welcome/NFPSSY?v=999",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    }
+  ]
+}
