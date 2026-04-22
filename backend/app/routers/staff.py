@@ -256,6 +256,17 @@ async def update_staff(
         updates["status"] = payload.status
     if "campaign_id" in payload.model_fields_set:
         updates["campaign_id"] = await validate_campaign(db, payload.campaign_id)
+    for field_name in (
+        "risk_frozen",
+        "daily_claim_limit",
+        "daily_redeem_limit",
+        "payout_method",
+        "payout_account_name",
+        "payout_account_number",
+        "payout_notes",
+    ):
+        if field_name in payload.model_fields_set:
+            updates[field_name] = getattr(payload, field_name)
     if not updates:
         return StaffDetail.model_validate(serialize_staff(staff))
     updates["updated_at"] = datetime.now(timezone.utc)
@@ -264,6 +275,11 @@ async def update_staff(
         {"$set": updates},
         return_document=ReturnDocument.AFTER,
     )
+    if updates.get("risk_frozen") is True:
+        await db.promo_live_tokens.update_many(
+            {"staff_id": staff["_id"], "status": "active"},
+            {"$set": {"status": "expired", "expired_at": datetime.now(timezone.utc), "expired_reason": "risk_frozen"}},
+        )
     return StaffDetail.model_validate(serialize_staff(updated))
 
 
@@ -285,6 +301,55 @@ async def update_staff_status(
             {"$set": {"status": "expired", "expired_at": now, "expired_reason": "staff_status_change"}},
         )
     return MessageResponse(message="Staff status updated successfully")
+
+
+@router.post("/{staff_id}/pause", response_model=MessageResponse)
+async def admin_pause_staff(
+    staff_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> MessageResponse:
+    staff = await get_staff_or_404(db, staff_id)
+    now = datetime.now(timezone.utc)
+    await db.staff_users.update_one(
+        {"_id": staff["_id"]},
+        {"$set": {
+            "work_status": "paused",
+            "promotion_paused": True,
+            "pause_reason": "paused_by_admin",
+            "paused_at": now,
+            "updated_at": now,
+        }},
+    )
+    await db.promo_live_tokens.update_many(
+        {"staff_id": staff["_id"], "status": "active"},
+        {"$set": {"status": "expired", "expired_at": now, "expired_reason": "admin_pause"}},
+    )
+    return MessageResponse(message="Promoter paused by admin")
+
+
+@router.post("/{staff_id}/resume", response_model=MessageResponse)
+async def admin_resume_staff(
+    staff_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> MessageResponse:
+    staff = await get_staff_or_404(db, staff_id)
+    current_work_status = staff.get("work_status", "stopped")
+    if current_work_status != "paused":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only paused promoters can be resumed by admin",
+        )
+    now = datetime.now(timezone.utc)
+    await db.staff_users.update_one(
+        {"_id": staff["_id"]},
+        {"$set": {
+            "work_status": "promoting",
+            "promotion_paused": False,
+            "resumed_at": now,
+            "updated_at": now,
+        }},
+    )
+    return MessageResponse(message="Promoter resumed by admin")
 
 
 @router.put("/{staff_id}/reset-password", response_model=MessageResponse)

@@ -111,6 +111,8 @@ async def seed_settings():
         {"key": "ip_daily_limit", "value": 20, "group": "risk_control", "description": "Maximum OTP requests per IP inside ip_window_min"},
         {"key": "ip_window_min", "value": 60, "group": "risk_control", "description": "Rolling window in minutes for ip_daily_limit"},
         {"key": "customer_service_enabled", "value": False, "group": "customer_service", "description": "Show floating customer-service button on user pages"},
+        {"key": "staff_register_enabled", "value": True, "group": "staff_register", "description": "Allow public staff registration via POST /api/auth/staff/register (default on for continuity)"},
+        {"key": "staff_register_captcha_enabled", "value": False, "group": "staff_register", "description": "Require simple math captcha on staff register (frontend-rendered, backend-verified)"},
         {"key": "customer_service_whatsapp", "value": "", "group": "customer_service", "description": "WhatsApp link or number (e.g., https://wa.me/63XXXXXXXXXX)"},
         {"key": "customer_service_telegram", "value": "", "group": "customer_service", "description": "Telegram link (e.g., https://t.me/yourhandle)"},
     ]

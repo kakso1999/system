@@ -222,6 +222,12 @@ async def register(
     payload: StaffRegisterRequest,
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
+    reg_doc = await db.system_settings.find_one({"key": "staff_register_enabled"})
+    if reg_doc is not None and reg_doc.get("value") is False:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "register_disabled", "message": "Staff registration is currently closed."},
+        )
     phone = validate_phone(payload.phone)
     await ensure_unique_staff_fields(db, payload.username, phone)
     parent = None

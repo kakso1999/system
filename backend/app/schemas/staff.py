@@ -60,6 +60,13 @@ class StaffUpdateRequest(BaseModel):
     phone: str | None = None
     status: StaffStatus | None = None
     campaign_id: str | None = None
+    risk_frozen: bool | None = None
+    daily_claim_limit: int | None = None
+    daily_redeem_limit: int | None = None
+    payout_method: str | None = None
+    payout_account_name: str | None = None
+    payout_account_number: str | None = None
+    payout_notes: str | None = None
 
 
 class StaffStatusUpdateRequest(BaseModel):
@@ -133,3 +140,10 @@ class StaffDetail(StaffListItem):
     parent_id: str | None = None
     campaign_id: str | None = None
     updated_at: datetime | None = None
+    risk_frozen: bool = False
+    daily_claim_limit: int = 0
+    daily_redeem_limit: int = 0
+    payout_method: str = ""
+    payout_account_name: str = ""
+    payout_account_number: str = ""
+    payout_notes: str = ""

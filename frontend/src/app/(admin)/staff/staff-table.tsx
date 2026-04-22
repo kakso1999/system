@@ -1,4 +1,5 @@
 import { Ban, CheckCircle, Pencil, Trash2, XCircle } from "lucide-react";
+import api from "@/lib/api";
 import type { Staff } from "@/types";
 import { statusBadge, vipLabel } from "./staff-shared";
 
@@ -25,8 +26,23 @@ function formatDateShort(iso?: string | null) {
   return `${year}-${month}-${day} ${hours}:${minutes}`;
 }
 
+function getErrorDetail(error: unknown, fallback: string) {
+  const axiosErr = error as { response?: { data?: { detail?: string } } };
+  return axiosErr.response?.data?.detail || fallback;
+}
+
 export default function StaffTable(props: StaffTableProps) {
   const { loading, staffList, onEdit, onUpdateStatus, onDelete } = props;
+
+  const handleWorkStatusAction = async (staff: Staff, action: "pause" | "resume") => {
+    try {
+      await api.post(`/api/admin/staff/${staff.id}/${action}`);
+      window.location.reload();
+    } catch (error: unknown) {
+      const fallback = action === "pause" ? "Failed to pause promoter" : "Failed to resume promoter";
+      alert(getErrorDetail(error, fallback));
+    }
+  };
 
   return (
     <div className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
@@ -95,6 +111,24 @@ export default function StaffTable(props: StaffTableProps) {
                         title={staff.status === "active" ? "禁用" : "启用"}
                       >
                         {staff.status === "active" ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                      </button>
+                    )}
+                    {staff.work_status === "promoting" && (
+                      <button
+                        onClick={() => void handleWorkStatusAction(staff, "pause")}
+                        className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-800 transition-colors hover:bg-yellow-200"
+                        title="暂停推广"
+                      >
+                        Pause
+                      </button>
+                    )}
+                    {staff.work_status === "paused" && (
+                      <button
+                        onClick={() => void handleWorkStatusAction(staff, "resume")}
+                        className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700 transition-colors hover:bg-green-200"
+                        title="恢复推广"
+                      >
+                        Resume
                       </button>
                     )}
                     <button
