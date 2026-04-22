@@ -4,8 +4,9 @@ import math
 from datetime import datetime, timezone
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pydantic import BaseModel, ConfigDict
 
 from app.database import get_db
 from app.dependencies import get_current_admin
@@ -14,6 +15,15 @@ from app.schemas.common import MessageResponse, PageResponse
 from app.utils.helpers import to_str_id
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
+
+
+class PasteImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    codes_text: str
+    campaign_id: str
+    wheel_item_id: str
+    pool_type: str = "paste"
 
 
 def parse_object_id(value: str, field_name: str) -> ObjectId:
@@ -37,16 +47,62 @@ async def get_reward_code_or_404(db: AsyncIOMotorDatabase, code_id: str) -> dict
     return reward_code
 
 
-async def read_csv_rows(file: UploadFile) -> list[dict]:
+async def read_upload_text(file: UploadFile, label: str) -> str:
     try:
-        content = (await file.read()).decode("utf-8").lstrip("\ufeff")
+        return (await file.read()).decode("utf-8").lstrip("\ufeff")
     except UnicodeDecodeError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CSV must be UTF-8 encoded") from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{label} must be UTF-8 encoded") from exc
+
+
+async def read_csv_rows(file: UploadFile) -> list[dict]:
+    content = await read_upload_text(file, "CSV")
     reader = csv.DictReader(io.StringIO(content))
     required = {"code", "campaign_id", "wheel_item_id", "pool_type"}
     if not reader.fieldnames or not required.issubset(set(reader.fieldnames)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CSV missing required columns")
     return [row for row in reader if row]
+
+
+def is_text_upload(file: UploadFile) -> bool:
+    filename = (file.filename or "").lower()
+    content_type = (file.content_type or "").lower()
+    return filename.endswith(".txt") or content_type.startswith("text/plain")
+
+
+def parse_codes_text(codes_text: str) -> list[str]:
+    return [line.strip() for line in codes_text.lstrip("\ufeff").splitlines() if line.strip()]
+
+
+def build_rows_from_codes(
+    codes: list[str],
+    campaign_id: str,
+    wheel_item_id: str,
+    pool_type: str,
+) -> list[dict]:
+    return [
+        {
+            "code": code,
+            "campaign_id": campaign_id,
+            "wheel_item_id": wheel_item_id,
+            "pool_type": pool_type,
+        }
+        for code in codes
+    ]
+
+
+async def read_txt_rows(
+    file: UploadFile,
+    campaign_id: str | None,
+    wheel_item_id: str | None,
+    pool_type: str,
+) -> list[dict]:
+    if not campaign_id or not wheel_item_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="campaign_id and wheel_item_id are required for TXT import",
+        )
+    codes = parse_codes_text(await read_upload_text(file, "TXT"))
+    return build_rows_from_codes(codes, campaign_id.strip(), wheel_item_id.strip(), pool_type.strip())
 
 
 def build_reward_code_documents(rows: list[dict], existing_codes: set[str]) -> list[dict]:
@@ -80,6 +136,13 @@ async def get_existing_codes(db: AsyncIOMotorDatabase, rows: list[dict]) -> set[
     return {record["code"] for record in records}
 
 
+async def insert_reward_code_rows(db: AsyncIOMotorDatabase, rows: list[dict]) -> int:
+    documents = build_reward_code_documents(rows, await get_existing_codes(db, rows))
+    if documents:
+        await db.reward_codes.insert_many(documents)
+    return len(documents)
+
+
 @router.get("/", response_model=PageResponse)
 async def list_reward_codes(
     page: int = Query(1, ge=1),
@@ -109,16 +172,60 @@ async def list_reward_codes(
     )
 
 
+@router.get("/stats")
+async def reward_code_stats(
+    campaign_id: str | None = None,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    query_base: dict = {}
+    if campaign_id:
+        query_base["campaign_id"] = parse_object_id(campaign_id, "campaign_id")
+    now = datetime.now(timezone.utc)
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    async def count(extra: dict) -> int:
+        return await db.reward_codes.count_documents({**query_base, **extra})
+
+    return {
+        "total": await count({}),
+        "unused": await count({"status": "unused"}),
+        "assigned": await count({"status": "assigned"}),
+        "redeemed": await count({"status": "redeemed"}),
+        "blocked": await count({"status": "blocked"}),
+        "assigned_today": await count({"status": "assigned", "updated_at": {"$gte": day_start}}),
+        "redeemed_today": await count({"status": "redeemed", "redeemed_at": {"$gte": day_start}}),
+    }
+
+
 @router.post("/import", response_model=MessageResponse)
 async def import_reward_codes(
     file: UploadFile = File(...),
+    campaign_id: str | None = Form(None),
+    wheel_item_id: str | None = Form(None),
+    pool_type: str = Form("imported"),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
-    rows = await read_csv_rows(file)
-    documents = build_reward_code_documents(rows, await get_existing_codes(db, rows))
-    if documents:
-        await db.reward_codes.insert_many(documents)
-    return MessageResponse(message=f"Imported {len(documents)} codes")
+    if is_text_upload(file):
+        rows = await read_txt_rows(file, campaign_id, wheel_item_id, pool_type)
+    else:
+        rows = await read_csv_rows(file)
+    count = await insert_reward_code_rows(db, rows)
+    return MessageResponse(message=f"Imported {count} codes")
+
+
+@router.post("/import-paste", response_model=MessageResponse)
+async def import_reward_codes_paste(
+    payload: PasteImportRequest,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> MessageResponse:
+    rows = build_rows_from_codes(
+        parse_codes_text(payload.codes_text),
+        payload.campaign_id.strip(),
+        payload.wheel_item_id.strip(),
+        payload.pool_type.strip(),
+    )
+    count = await insert_reward_code_rows(db, rows)
+    return MessageResponse(message=f"Imported {count} codes")
 
 
 @router.put("/{code_id}/block", response_model=MessageResponse)

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Plus, Pencil, Trash2, Play, Pause, Eye, Users, Settings2, ExternalLink, Upload, Gift, ChevronDown, ChevronRight } from "lucide-react";
 import api, { resolveApiUrl } from "@/lib/api";
 import type { Campaign, PageResponse, WheelItem, Staff } from "@/types";
+import RewardCodesImport from "./reward-codes-import";
 
 type ModalMode = "create" | "edit" | "wheel" | "staff" | null;
 
@@ -586,6 +587,12 @@ export default function CampaignsPage() {
                 </div>
               </div>
             )}
+
+            <RewardCodesImport
+              campaignId={selected.id}
+              wheelItemId={editingWheel?.id}
+              wheelItems={wheelItems}
+            />
 
             {/* Add/Edit form */}
             <div className="border-t border-outline-variant/20 pt-6">
