@@ -4,6 +4,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_db
 from app.dependencies import get_current_admin
 from app.schemas.common import MessageResponse, PageResponse
+from app.utils.action_log import log_admin_action
 from app.utils.helpers import to_str_ids
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
@@ -22,7 +23,11 @@ ALLOWED_RISK_KEYS = {
 
 
 @router.put("/")
-async def update_risk_setting(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
+async def update_risk_setting(
+    payload: dict,
+    current_admin: dict = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
     if "key" not in payload or "value" not in payload:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="key and value are required")
     if payload.get("key") not in ALLOWED_RISK_KEYS:
@@ -30,6 +35,14 @@ async def update_risk_setting(payload: dict, db: AsyncIOMotorDatabase = Depends(
     await db.system_settings.update_one(
         {"key": payload["key"]},
         {"$set": {"value": payload["value"]}},
+    )
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "risk_setting.update",
+        "risk_setting",
+        payload["key"],
+        {"key": payload["key"], "value": payload["value"]},
     )
     return MessageResponse(message="Setting updated")
 

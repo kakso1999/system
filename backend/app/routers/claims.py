@@ -8,6 +8,7 @@ from app.database import get_db
 from app.dependencies import get_current_admin
 from app.schemas.common import PageResponse
 from app.services.withdrawals import log_finance_action
+from app.utils.csv_export import csv_stream
 from app.utils.helpers import to_str_id
 from app.utils.money import from_cents, read_cents
 
@@ -89,6 +90,54 @@ async def list_claims(
         items=[serialize_claim(i) for i in items], total=total,
         page=page, page_size=page_size,
         pages=math.ceil(total / page_size) if total else 0,
+    )
+
+
+@router.get("/export")
+async def export_claims(db: AsyncIOMotorDatabase = Depends(get_db)):
+    cursor = db.claims.find(
+        {},
+        {
+            "campaign_id": 1,
+            "staff_id": 1,
+            "phone": 1,
+            "prize_type": 1,
+            "status": 1,
+            "settlement_status": 1,
+            "reward_code": 1,
+            "created_at": 1,
+        },
+    ).sort("created_at", -1)
+
+    async def rows():
+        async for doc in cursor:
+            yield [
+                str(doc.get("_id") or ""),
+                str(doc.get("campaign_id") or ""),
+                str(doc.get("staff_id") or ""),
+                doc.get("phone", ""),
+                doc.get("prize_type", ""),
+                doc.get("status", ""),
+                doc.get("settlement_status", ""),
+                doc.get("reward_code", ""),
+                doc["created_at"].isoformat() if doc.get("created_at") else "",
+            ]
+
+    items = [row async for row in rows()]
+    return csv_stream(
+        items,
+        [
+            "id",
+            "campaign_id",
+            "staff_id",
+            "phone",
+            "prize_type",
+            "status",
+            "settlement_status",
+            "reward_code",
+            "created_at",
+        ],
+        "claims.csv",
     )
 
 

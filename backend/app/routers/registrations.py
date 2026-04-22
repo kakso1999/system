@@ -21,6 +21,7 @@ from app.schemas.registration import (
     RegistrationApplicationResponse,
     RejectRequest,
 )
+from app.utils.action_log import log_admin_action
 from app.utils.helpers import to_str_id
 
 logger = logging.getLogger(__name__)
@@ -182,6 +183,18 @@ async def approve_registration(
         if isinstance(exc, HTTPException):
             raise exc
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to approve registration") from exc
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "registration.approve",
+        "registration",
+        application["_id"],
+        {
+            "approved_staff_id": str(application.get("approved_staff_id") or ""),
+            "username": application.get("username", ""),
+            "phone": application.get("phone", ""),
+        },
+    )
     return serialize_application(application, parent)
 
 
@@ -209,4 +222,16 @@ async def reject_registration(
         },
     )
     updated = await db.staff_registration_applications.find_one({"_id": application["_id"]})
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "registration.reject",
+        "registration",
+        application["_id"],
+        {
+            "reason": payload.reason,
+            "username": application.get("username", ""),
+            "phone": application.get("phone", ""),
+        },
+    )
     return serialize_application(updated, await resolve_referrer_staff(db, updated.get("invite_code")))

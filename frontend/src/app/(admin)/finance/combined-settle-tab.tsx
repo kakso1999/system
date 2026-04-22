@@ -26,6 +26,10 @@ export default function CombinedSettleTab() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
+  const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
+  const [batchIncludeBonus, setBatchIncludeBonus] = useState(true);
+  const [batchNote, setBatchNote] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
 
   const loadStaff = useCallback(async () => {
@@ -71,6 +75,49 @@ export default function CombinedSettleTab() {
     });
   };
 
+  const toggleSelected = (staffId: string) => {
+    setSelectedStaffIds((current) => (
+      current.includes(staffId)
+        ? current.filter((item) => item !== staffId)
+        : [...current, staffId]
+    ));
+  };
+
+  const toggleSelectAllVisible = () => {
+    const visibleIds = staffList.map((staff) => staff.id);
+    setSelectedStaffIds((current) => {
+      const allSelected = visibleIds.length > 0 && visibleIds.every((id) => current.includes(id));
+      if (allSelected) {
+        return current.filter((id) => !visibleIds.includes(id));
+      }
+      return Array.from(new Set([...current, ...visibleIds]));
+    });
+  };
+
+  const submitBatch = async () => {
+    if (!selectedStaffIds.length) {
+      alert("请先选择地推员");
+      return;
+    }
+    setBatchSubmitting(true);
+    try {
+      const res = await api.post<{ message: string }>("/api/admin/finance/settlement-batch", {
+        staff_ids: selectedStaffIds,
+        include_bonus: batchIncludeBonus,
+        note: batchNote,
+      });
+      setSelectedStaffIds([]);
+      setBatchIncludeBonus(true);
+      setBatchNote("");
+      await loadStaff();
+      alert(res.data.message || "批量结算成功");
+    } catch (error) {
+      alert(getErrorDetail(error) || "批量结算失败");
+    } finally {
+      setBatchSubmitting(false);
+    }
+  };
+
   const submit = async () => {
     if (!modal) return;
     setSubmitting(true);
@@ -91,23 +138,77 @@ export default function CombinedSettleTab() {
   };
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const allVisibleSelected = staffList.length > 0 && staffList.every((staff) => selectedStaffIds.includes(staff.id));
 
   return (
     <section className="space-y-4">
+      <div className="rounded-2xl bg-surface-container-lowest p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-1">
+            <h2 className="text-lg font-extrabold font-[var(--font-headline)]">批量结算</h2>
+            <p className="text-sm text-on-surface-variant">选择多个地推员后，一次性生成结算批次。</p>
+            <p className="text-xs font-semibold text-primary">已选 {selectedStaffIds.length} 人</p>
+          </div>
+          <div className="flex flex-col gap-3 lg:min-w-[460px]">
+            <input
+              value={batchNote}
+              maxLength={500}
+              onChange={(event) => setBatchNote(event.target.value)}
+              placeholder="批次备注（可选）"
+              className="w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm focus:ring-2 focus:ring-primary/40"
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm font-semibold">
+                <input
+                  type="checkbox"
+                  checked={batchIncludeBonus}
+                  onChange={(event) => setBatchIncludeBonus(event.target.checked)}
+                />
+                包含 bonus 奖励
+              </label>
+              <button
+                onClick={() => setSelectedStaffIds([])}
+                disabled={!selectedStaffIds.length || batchSubmitting}
+                className="rounded-xl px-4 py-2 text-sm font-bold text-on-surface-variant hover:bg-surface-container-low disabled:opacity-40"
+              >
+                清空选择
+              </button>
+              <button
+                onClick={submitBatch}
+                disabled={!selectedStaffIds.length || batchSubmitting}
+                className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-on-primary disabled:opacity-40"
+              >
+                {batchSubmitting ? "提交中..." : "结算选中"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="overflow-x-auto rounded-xl bg-surface-container-lowest shadow-sm">
-        <table className="w-full min-w-[760px] text-sm">
+        <table className="w-full min-w-[820px] text-sm">
           <thead>
             <tr className="border-b border-surface-container-high">
+              <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-on-surface-variant">
+                <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} />
+              </th>
               {["地推员", "待结算佣金 (PHP)", "待结算 bonus", "操作"].map((header) => (
                 <th key={header} className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-on-surface-variant">{header}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan={4} className="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr> : null}
-            {!loading && staffList.length === 0 ? <tr><td colSpan={4} className="px-6 py-8 text-center text-on-surface-variant">暂无数据</td></tr> : null}
+            {loading ? <tr><td colSpan={5} className="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr> : null}
+            {!loading && staffList.length === 0 ? <tr><td colSpan={5} className="px-6 py-8 text-center text-on-surface-variant">暂无数据</td></tr> : null}
             {!loading && staffList.map((staff) => (
               <tr key={staff.id} className="border-b border-surface-container-high/60 hover:bg-surface-container-low/40">
+                <td className="px-6 py-4">
+                  <input
+                    type="checkbox"
+                    checked={selectedStaffIds.includes(staff.id)}
+                    onChange={() => toggleSelected(staff.id)}
+                  />
+                </td>
                 <td className="px-6 py-4">
                   <div className="font-semibold">{staff.name}</div>
                   <div className="font-mono text-xs text-on-surface-variant">{staff.staff_no}</div>
