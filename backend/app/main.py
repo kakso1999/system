@@ -192,6 +192,7 @@ app.include_router(bonus.promoter_router, prefix="/api/promoter/bonus", tags=["P
 app.include_router(user_flow.router, prefix="/api/claim", tags=["User Claim Flow"])
 app.include_router(promoter.router, prefix="/api/promoter", tags=["Promoter"])
 app.include_router(external.router, prefix="/api/external", tags=["External"])
+app.include_router(external.alias_router, prefix="/api/redeem", tags=["Redeem Alias"])
 app.include_router(sponsors.router, prefix="/api/admin/sponsors", tags=["Sponsors"])
 app.include_router(sponsors.public_router, prefix="/api/sponsors", tags=["Sponsors Public"])
 app.include_router(public_settings.router, prefix="/api/public", tags=["Public Settings"])
