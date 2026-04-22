@@ -109,8 +109,11 @@ export default function AdminRecordsTab(props: {
   loading: boolean;
   page: number;
   totalPages: number;
+  batchSettleCount: number;
+  settlingBatch: boolean;
   onFiltersChange: (filters: Filters) => void;
   onResetFilters: () => void;
+  onBatchSettle: () => void;
   onPrev: () => void;
   onNext: () => void;
 }) {
@@ -118,6 +121,15 @@ export default function AdminRecordsTab(props: {
     <section className="space-y-5">
       <SettlementStats settlements={props.settlements} />
       <FiltersSection filters={props.filters} staff={props.staff} onChange={props.onFiltersChange} onReset={props.onResetFilters} />
+      <div className="flex justify-end">
+        <button
+          onClick={props.onBatchSettle}
+          disabled={props.loading || props.settlingBatch || props.batchSettleCount === 0}
+          className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {props.settlingBatch ? "结算中..." : `批量结算${props.batchSettleCount > 0 ? `（${props.batchSettleCount}）` : ""}`}
+        </button>
+      </div>
       <RecordsTable records={props.records} staffMap={props.staffMap} loading={props.loading} />
       <div className="flex items-center justify-center gap-2">
         <button onClick={props.onPrev} disabled={props.page === 1} className="rounded-lg px-4 py-2 text-sm font-semibold text-on-surface-variant hover:bg-surface-container-low disabled:opacity-40">上一页</button>

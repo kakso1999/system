@@ -175,8 +175,10 @@ async def insert_bonus_claim_record(
     rule_snapshot = dict(rule)
     rule_snapshot["tiers"] = sorted_tiers(rule.get("tiers", []))
     cents = int(tier.get("amount_cents") or to_cents(tier.get("amount")))
+    staff = await db.staff_users.find_one({"_id": staff_id}, {"campaign_id": 1})
     doc = {
         "staff_id": staff_id,
+        "campaign_id": (staff or {}).get("campaign_id"),
         "date": date_str,
         "tier_threshold": int(tier["threshold"]),
         "amount": from_cents(cents),
