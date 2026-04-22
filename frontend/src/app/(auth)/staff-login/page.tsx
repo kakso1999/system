@@ -1,15 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BadgeCheck, User, Lock, LogIn } from "lucide-react";
 import api from "@/lib/api";
 import { setAuth } from "@/lib/auth";
+import { getPublicSettings } from "@/lib/public-settings";
+
+type StaffLoginSettings = {
+  staff_register_enabled?: boolean;
+};
 
 export default function StaffLoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [staffRegisterEnabled, setStaffRegisterEnabled] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    getPublicSettings().then((settings) => {
+      if (active) {
+        setStaffRegisterEnabled((settings as StaffLoginSettings).staff_register_enabled ?? true);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,12 +94,14 @@ export default function StaffLoginPage() {
               {!loading && <LogIn className="w-5 h-5" />}
             </button>
           </form>
-          <div className="mt-6 text-center">
-            <p className="text-sm text-on-surface-variant">
-              Don&apos;t have an account?{" "}
-              <a href="/staff-register" className="text-primary font-bold hover:underline">Register here</a>
-            </p>
-          </div>
+          {staffRegisterEnabled && (
+            <div className="mt-6 text-center">
+              <p className="text-sm text-on-surface-variant">
+                Don&apos;t have an account?{" "}
+                <a href="/staff-register" className="text-primary font-bold hover:underline">Register here</a>
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </main>

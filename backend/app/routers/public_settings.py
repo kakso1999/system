@@ -10,6 +10,8 @@ _WHITELIST = {
     "activity_title": "Lucky Wheel",
     "activity_desc": "",
     "default_redirect_url": "",
+    "staff_register_enabled": True,
+    "staff_register_captcha_enabled": False,
     "customer_service_enabled": False,
     "customer_service_whatsapp": "",
     "customer_service_telegram": "",
