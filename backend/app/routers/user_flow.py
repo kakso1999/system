@@ -111,6 +111,7 @@ async def _require_active_session(
     staff_oid,
     mismatch_code: str = "session_required",
     campaign_oid=None,
+    device_fingerprint: str | None = None,
 ):
     if not session_token:
         raise HTTPException(status_code=403, detail={"code": "session_required"})
@@ -129,6 +130,8 @@ async def _require_active_session(
         raise HTTPException(status_code=403, detail={"code": mismatch_code})
     if campaign_oid is not None and session.get("campaign_id") != campaign_oid:
         raise HTTPException(status_code=403, detail={"code": mismatch_code})
+    if device_fingerprint is not None and str(session.get("device_fingerprint", "")) != str(device_fingerprint):
+        raise HTTPException(status_code=403, detail={"code": "device_mismatch"})
     return session
 
 
@@ -204,7 +207,14 @@ async def welcome(
     if not campaign:
         raise HTTPException(status_code=404, detail="No active campaign")
     if await get_setting(db, "live_qr_enabled"):
-        await _require_active_session(db, session_token_header, staff["_id"], campaign_oid=campaign["_id"])
+        device_fp = request.headers.get("X-Device-Fingerprint", "") or ""
+        await _require_active_session(
+            db,
+            session_token_header,
+            staff["_id"],
+            campaign_oid=campaign["_id"],
+            device_fingerprint=device_fp if device_fp else None,
+        )
 
     await db.staff_users.update_one({"_id": staff["_id"]}, {"$inc": {"stats.total_scans": 1}})
     await db.scan_logs.insert_one({
@@ -256,7 +266,14 @@ async def spin(
     if staff.get("campaign_id") != campaign["_id"]:
         raise HTTPException(status_code=400, detail="Campaign does not match promoter")
     if await get_setting(db, "live_qr_enabled"):
-        await _require_active_session(db, session_token_header, staff["_id"], campaign_oid=cid)
+        device_fp = request.headers.get("X-Device-Fingerprint", "") or str(payload.get("device_fingerprint", "") or "")
+        await _require_active_session(
+            db,
+            session_token_header,
+            staff["_id"],
+            campaign_oid=cid,
+            device_fingerprint=device_fp if device_fp else None,
+        )
     items = await db.wheel_items.find(
         {"campaign_id": cid, "enabled": True}
     ).sort("sort_order", 1).to_list(length=50)

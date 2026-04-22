@@ -11,6 +11,7 @@ from typing import Literal
 from fastapi import Response
 
 from app.config import get_settings
+from app.utils.csrf import CSRF_COOKIE_NAME, clear_csrf_cookie, set_csrf_cookie
 
 Role = Literal["admin", "staff"]
 
@@ -68,3 +69,4 @@ def clear_auth_cookies(response: Response, role: Role) -> None:
     base = _cookie_kwargs()
     for key in (access_cookie_name(role), refresh_cookie_name(role)):
         response.set_cookie(key=key, value="", max_age=0, **base)
+    clear_csrf_cookie(response)
