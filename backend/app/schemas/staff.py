@@ -40,6 +40,8 @@ class StaffRegisterRequest(BaseModel):
     username: str
     password: str
     invite_code: str | None = None
+    captcha_token: str | None = None
+    captcha_answer: str | None = None
 
 
 class StaffCreateRequest(BaseModel):
