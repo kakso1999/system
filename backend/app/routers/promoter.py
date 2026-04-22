@@ -563,3 +563,28 @@ async def heartbeat(
         {"$set": {"last_seen_at": now}},
     )
     return {"ok": True, "last_seen_at": now.isoformat()}
+
+
+@router.get("/recent-claims")
+async def recent_claims(
+    limit: int = Query(10, ge=1, le=50),
+    current_staff: dict = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    cursor = db.claims.find(
+        {"staff_id": current_staff["_id"], "status": "success"},
+        {"phone": 1, "prize_type": 1, "reward_code": 1, "created_at": 1, "wheel_item_id": 1, "settlement_status": 1},
+    ).sort("created_at", -1).limit(limit)
+    items = []
+    async for doc in cursor:
+        phone = str(doc.get("phone") or "")
+        masked = phone[:3] + "***" + phone[-4:] if len(phone) > 7 else phone
+        items.append({
+            "id": str(doc["_id"]),
+            "phone_masked": masked,
+            "prize_type": doc.get("prize_type", ""),
+            "reward_code": doc.get("reward_code", ""),
+            "settlement_status": doc.get("settlement_status", ""),
+            "created_at": doc["created_at"].isoformat() if doc.get("created_at") else "",
+        })
+    return {"items": items}

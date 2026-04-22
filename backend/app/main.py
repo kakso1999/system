@@ -108,6 +108,7 @@ async def seed_settings():
         {"key": "default_redirect_url", "value": "", "group": "general", "description": "Default redirect URL used by reward codes when no per-item redirect_url is set"},
         {"key": "sms_cooldown_sec", "value": 60, "group": "risk_control", "description": "Minimum seconds between OTP requests for the same phone"},
         {"key": "phone_daily_limit", "value": 3, "group": "risk_control", "description": "Maximum OTP requests per phone in a rolling 10-minute window"},
+        {"key": "phone_per_flow_limit", "value": 3, "group": "risk_control", "description": "Max OTP sends per phone within a single claim flow/session"},
         {"key": "ip_daily_limit", "value": 20, "group": "risk_control", "description": "Maximum OTP requests per IP inside ip_window_min"},
         {"key": "ip_window_min", "value": 60, "group": "risk_control", "description": "Rolling window in minutes for ip_daily_limit"},
         {"key": "customer_service_enabled", "value": False, "group": "customer_service", "description": "Show floating customer-service button on user pages"},

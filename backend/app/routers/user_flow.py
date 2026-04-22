@@ -195,12 +195,15 @@ async def create_generated_reward_code(db, *, campaign_id, wheel_item_id, staff_
 async def welcome(
     staff_code: str,
     request: Request,
+    v: int | None = Query(None),
     session_token_header: str | None = Header(None, alias="X-Session-Token"),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     staff = await db.staff_users.find_one({"invite_code": staff_code.upper()})
     if not staff:
         raise HTTPException(status_code=404, detail="Promoter not found")
+    if v is not None and int(staff.get("qr_version", 0) or 0) != int(v):
+        raise HTTPException(status_code=404, detail={"code": "qr_version_mismatch"})
     campaign = None
     if staff.get("campaign_id"):
         campaign = await db.campaigns.find_one({"_id": staff["campaign_id"], "status": "active"})
@@ -367,6 +370,10 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
     phone = validate_phone(phone)
 
     ip = extract_client_ip(request)
+    session_token = request.headers.get("X-Session-Token")
+    session = None
+    if session_token:
+        session = await db.promo_sessions.find_one({"session_token": session_token}, {"_id": 1})
 
     now = datetime.now(timezone.utc)
     cooldown_sec = int(await get_setting(db, "sms_cooldown_sec") or 60)
@@ -384,25 +391,44 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
                 return {"verified": False, "message": "Please wait before requesting another code."}
 
     phone_limit = int(await get_setting(db, "phone_daily_limit") or 3)
-    ten_min_ago = now - timedelta(minutes=10)
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     recent_otp_count = await db.otp_records.count_documents({
-        "phone": phone, "created_at": {"$gte": ten_min_ago}
+        "phone": phone, "created_at": {"$gte": day_start}
     })
     if recent_otp_count >= phone_limit:
         await log_risk(db, campaign_id, phone, ip, "",
                        "otp_rate_limit", f"Phone {phone[-4:]} requested too many OTPs")
         return {"verified": False, "message": "Too many requests. Please wait a few minutes."}
 
-    ip_limit = int(await get_setting(db, "ip_daily_limit") or 20)
-    ip_window_min = int(await get_setting(db, "ip_window_min") or 60)
-    ip_window_ago = now - timedelta(minutes=ip_window_min)
-    ip_otp_count = await db.otp_records.count_documents({
-        "ip": ip, "created_at": {"$gte": ip_window_ago}
-    })
-    if ip_otp_count >= ip_limit:
+    phone_per_flow_limit = int(await get_setting(db, "phone_per_flow_limit") or 3)
+    if session and session.get("_id"):
+        flow_query = {"phone": phone, "promo_session_id": session["_id"]}
+    else:
+        thirty_min_ago = now - timedelta(minutes=30)
+        flow_query = {"phone": phone, "created_at": {"$gte": thirty_min_ago}}
+    flow_otp_count = await db.otp_records.count_documents(flow_query)
+    if flow_otp_count >= phone_per_flow_limit:
         await log_risk(db, campaign_id, phone, ip, "",
-                       "otp_ip_rate_limit", f"IP {ip} too many OTP requests")
-        return {"verified": False, "message": "Too many requests from this network."}
+                       "otp_flow_limit", f"Phone {phone[-4:]} exceeded per-flow OTP cap")
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "phone_per_flow_limit",
+                "message": "Too many OTP sends for this flow, contact the promoter.",
+            },
+        )
+
+    if await get_setting(db, "ip_rate_limit_enabled") is not False:
+        ip_limit = int(await get_setting(db, "ip_daily_limit") or 20)
+        ip_window_min = int(await get_setting(db, "ip_window_min") or 60)
+        ip_window_ago = now - timedelta(minutes=ip_window_min)
+        ip_otp_count = await db.otp_records.count_documents({
+            "ip": ip, "created_at": {"$gte": ip_window_ago}
+        })
+        if ip_otp_count >= ip_limit:
+            await log_risk(db, campaign_id, phone, ip, "",
+                           "otp_ip_rate_limit", f"IP {ip} too many OTP requests")
+            return {"verified": False, "message": "Too many requests from this network."}
 
     # M4: Atomic per-phone/per-bucket reservation to prevent concurrent-request race.
     bucket = int(now.timestamp()) // max(1, cooldown_sec)
@@ -439,6 +465,7 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
         "phone": phone, "code": code, "used": False,
         "attempts": 0,
         "campaign_id": safe_object_id(campaign_id),
+        "promo_session_id": session["_id"] if session else None,
         "ip": ip,
         "expires_at": now + timedelta(minutes=10),
         "created_at": now,

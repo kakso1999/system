@@ -61,13 +61,19 @@ def today_local_str(db_or_tz: str | None = None) -> tuple[str, datetime, datetim
     )
 
 
-async def count_valid_today(db, staff_id) -> int:
-    _, start, end = today_local_str()
-    return await db.claims.count_documents({
+def build_valid_bonus_claim_query(staff_id, start: datetime, end: datetime) -> dict:
+    return {
         "staff_id": staff_id,
         "status": "success",
+        "prize_type": "website",
+        "$or": [{"settlement_status": "unpaid"}, {"settlement_status": "paid"}],
         "created_at": {"$gte": start, "$lt": end},
-    })
+    }
+
+
+async def count_valid_today(db, staff_id) -> int:
+    _, start, end = today_local_str()
+    return await db.claims.count_documents(build_valid_bonus_claim_query(staff_id, start, end))
 
 
 async def list_today_claimed(db, staff_id) -> list[dict]:
@@ -122,11 +128,7 @@ def build_claimed_today_tiers(claims: list[dict]) -> list[dict]:
 
 async def get_today_bonus_progress(db, staff_id) -> dict:
     date_str, start, end = today_local_str()
-    valid_count = await db.claims.count_documents({
-        "staff_id": staff_id,
-        "status": "success",
-        "created_at": {"$gte": start, "$lt": end},
-    })
+    valid_count = await db.claims.count_documents(build_valid_bonus_claim_query(staff_id, start, end))
     claims = await list_today_claimed(db, staff_id)
     total_earned_cents = sum(read_cents(record) for record in claims)
     rule = await get_active_rule(db, staff_id)
@@ -155,11 +157,7 @@ async def get_bonus_claim_context(db, staff_id, tier_threshold: int) -> tuple[st
     tier = valid_threshold_tier(sorted_tiers(rule.get("tiers", [])), tier_threshold)
     if tier is None:
         raise ValueError("tier_not_found")
-    valid_count = await db.claims.count_documents({
-        "staff_id": staff_id,
-        "status": "success",
-        "created_at": {"$gte": start, "$lt": end},
-    })
+    valid_count = await db.claims.count_documents(build_valid_bonus_claim_query(staff_id, start, end))
     if valid_count < int(tier["threshold"]):
         raise ValueError("tier_not_reached")
     return date_str, valid_count, rule, tier
