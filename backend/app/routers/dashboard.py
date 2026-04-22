@@ -2,10 +2,16 @@ import asyncio
 from datetime import datetime, timezone
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_db
 from app.dependencies import get_current_admin
+from app.services.dashboard_rank import (
+    build_recent_claims,
+    build_recent_risk,
+    build_today_staff_rank,
+    build_today_team_rank,
+)
 from app.utils.datetime import get_day_start_utc
 from app.utils.money import from_cents
 
@@ -158,3 +164,35 @@ async def reward_overview(
         raise HTTPException(status_code=404, detail="Campaign not found")
     items = await asyncio.gather(*(build_reward_campaign_item(db, campaign, day_start) for campaign in campaigns))
     return {"campaigns": items, "totals": build_reward_totals(list(items))}
+
+
+@router.get("/recent-claims")
+async def get_recent_claims(
+    limit: int = Query(10, ge=1, le=50),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    return await build_recent_claims(db, limit)
+
+
+@router.get("/recent-risk")
+async def get_recent_risk(
+    limit: int = Query(10, ge=1, le=50),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    return await build_recent_risk(db, limit)
+
+
+@router.get("/today-staff-rank")
+async def get_today_staff_rank(
+    limit: int = Query(10, ge=1, le=50),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    return await build_today_staff_rank(db, limit)
+
+
+@router.get("/today-team-rank")
+async def get_today_team_rank(
+    limit: int = Query(10, ge=1, le=50),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    return await build_today_team_rank(db, limit)

@@ -3,6 +3,12 @@
 import { useEffect, useState } from "react";
 import { ScanLine, CheckCircle, UserPlus, BarChart3, BadgeCheck, UsersRound, Wallet } from "lucide-react";
 import api from "@/lib/api";
+import DashboardSections, {
+  type RecentClaimItem,
+  type RecentRiskItem,
+  type TodayStaffRankItem,
+  type TodayTeamRankItem,
+} from "./dashboard-sections";
 
 interface DashboardData {
   today_scans: number; today_valid: number; today_staff: number;
@@ -12,21 +18,37 @@ interface DashboardData {
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [recentClaims, setRecentClaims] = useState<RecentClaimItem[]>([]);
+  const [recentRisk, setRecentRisk] = useState<RecentRiskItem[]>([]);
+  const [todayStaffRank, setTodayStaffRank] = useState<TodayStaffRankItem[]>([]);
+  const [todayTeamRank, setTodayTeamRank] = useState<TodayTeamRankItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { loadDashboard(); }, []);
 
   const loadDashboard = async () => {
     try {
-      const [dashboardRes, pendingRes] = await Promise.all([
+      const [dashboardRes, pendingRes, recentClaimsRes, recentRiskRes, todayStaffRankRes, todayTeamRankRes] = await Promise.all([
         api.get("/api/admin/dashboard/"),
         api.get("/api/admin/staff/", { params: { status: "pending_review", page: 1, page_size: 1 } }),
+        api.get<RecentClaimItem[]>("/api/admin/dashboard/recent-claims"),
+        api.get<RecentRiskItem[]>("/api/admin/dashboard/recent-risk"),
+        api.get<TodayStaffRankItem[]>("/api/admin/dashboard/today-staff-rank"),
+        api.get<TodayTeamRankItem[]>("/api/admin/dashboard/today-team-rank"),
       ]);
       setData(dashboardRes.data);
       setPendingCount(pendingRes.data.total || 0);
+      setRecentClaims(recentClaimsRes.data || []);
+      setRecentRisk(recentRiskRes.data || []);
+      setTodayStaffRank(todayStaffRankRes.data || []);
+      setTodayTeamRank(todayTeamRankRes.data || []);
     } catch {
       setData({ today_scans: 0, today_valid: 0, today_staff: 0, total_scans: 0, total_valid: 0, total_staff: 0, total_commission: 0 });
       setPendingCount(0);
+      setRecentClaims([]);
+      setRecentRisk([]);
+      setTodayStaffRank([]);
+      setTodayTeamRank([]);
     } finally {
       setLoading(false);
     }
@@ -72,6 +94,12 @@ export default function DashboardPage() {
         <p className="text-2xl font-extrabold font-[var(--font-headline)] text-yellow-800">{pendingCount}</p>
         <p className="text-sm text-yellow-700 mt-1">{pendingCount} pending registrations</p>
       </a>
+      <DashboardSections
+        recentClaims={recentClaims}
+        recentRisk={recentRisk}
+        todayStaffRank={todayStaffRank}
+        todayTeamRank={todayTeamRank}
+      />
     </div>
   );
 }
