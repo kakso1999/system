@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -10,20 +10,61 @@ from app.database import get_db
 from app.dependencies import get_current_admin
 from app.schemas.common import MessageResponse, TokenResponse, RefreshRequest
 from app.schemas.staff import ChangePasswordRequest, LoginRequest
-from app.utils.auth_cookies import clear_auth_cookies, refresh_cookie_name, set_auth_cookies
+from app.utils.auth_cookies import clear_auth_cookies, refresh_cookie_name, set_auth_cookies, set_csrf_cookie
+from app.utils.csrf import clear_csrf_cookie
+from app.utils.request_ip import extract_client_ip
 from app.utils.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
 
 router = APIRouter()
 
 
+async def _enforce_login_throttle(db, ip: str, username: str, role: str) -> None:
+    """Throttle login attempts. Mirrors PIN verify pattern from user_flow.py."""
+    now = datetime.now(timezone.utc)
+    window = now - timedelta(minutes=5)
+    per_ip = await db.risk_logs.count_documents({
+        "ip": ip,
+        "type": f"{role}_login_fail",
+        "created_at": {"$gte": window},
+    })
+    if per_ip >= 30:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "rate_limited", "message": "Too many login attempts, try again later."},
+        )
+    per_user = await db.risk_logs.count_documents({
+        "username": username,
+        "type": f"{role}_login_fail",
+        "created_at": {"$gte": window},
+    })
+    if per_user >= 10:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "rate_limited", "message": "Account temporarily locked due to failed login attempts."},
+        )
+
+
+async def _record_login_failure(db, ip: str, username: str, role: str) -> None:
+    await db.risk_logs.insert_one({
+        "ip": ip,
+        "type": f"{role}_login_fail",
+        "username": username,
+        "created_at": datetime.now(timezone.utc),
+    })
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(
     payload: LoginRequest,
+    request: Request,
     response: Response,
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> TokenResponse:
+    ip = extract_client_ip(request)
+    await _enforce_login_throttle(db, ip, payload.username, "admin")
     admin = await db.admins.find_one({"username": payload.username})
     if not admin or not verify_password(payload.password, admin["password_hash"]):
+        await _record_login_failure(db, ip, payload.username, "admin")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
@@ -35,6 +76,7 @@ async def login(
     token = create_access_token({"sub": str(admin["_id"]), "role": "admin"})
     refresh = create_refresh_token({"sub": str(admin["_id"]), "role": "admin"})
     set_auth_cookies(response, "admin", token, refresh)
+    set_csrf_cookie(response)
     return TokenResponse(
         access_token=token,
         refresh_token=refresh,
@@ -69,6 +111,7 @@ async def refresh(
     token = create_access_token({"sub": str(admin["_id"]), "role": "admin"})
     refresh_tok = create_refresh_token({"sub": str(admin["_id"]), "role": "admin"})
     set_auth_cookies(response, "admin", token, refresh_tok)
+    set_csrf_cookie(response)
     return TokenResponse(access_token=token, refresh_token=refresh_tok, role="admin")
 
 
@@ -93,4 +136,5 @@ async def change_password(
 @router.post("/logout", response_model=MessageResponse)
 async def logout(response: Response) -> MessageResponse:
     clear_auth_cookies(response, "admin")
+    clear_csrf_cookie(response)
     return MessageResponse(message="Logged out")

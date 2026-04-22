@@ -85,6 +85,14 @@ function getTokenForRequest(url: string) {
   return getAdminToken() || getStaffToken();
 }
 
+function getCsrfToken() {
+  if (typeof document === "undefined") {
+    return "";
+  }
+  const match = document.cookie.match(/(?:^|;\s*)gr_csrf=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 function getRoleFromHeader(authorization?: string): AuthRole | undefined {
   if (!authorization?.startsWith("Bearer ")) {
     return undefined;
@@ -227,6 +235,14 @@ async function handleResponseError(error: unknown) {
 
 api.interceptors.request.use((config) => {
   const url = String(config.url || "");
+  const method = String(config.method || "get").toLowerCase();
+  if (["post", "put", "patch", "delete"].includes(method)) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) {
+      config.headers = config.headers || {};
+      (config.headers as Record<string, string>)["X-CSRF-Token"] = csrfToken;
+    }
+  }
   if (isLoginCall(url) || isRefreshCall(url)) {
     return config;
   }
