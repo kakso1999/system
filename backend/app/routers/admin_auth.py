@@ -10,10 +10,17 @@ from app.database import get_db
 from app.dependencies import get_current_admin
 from app.schemas.common import MessageResponse, TokenResponse, RefreshRequest
 from app.schemas.staff import ChangePasswordRequest, LoginRequest
-from app.utils.auth_cookies import clear_auth_cookies, refresh_cookie_name, set_auth_cookies, set_csrf_cookie
+from app.utils.auth_cookies import (
+    access_cookie_name,
+    clear_auth_cookies,
+    refresh_cookie_name,
+    set_auth_cookies,
+    set_csrf_cookie,
+)
 from app.utils.csrf import clear_csrf_cookie
 from app.utils.request_ip import extract_client_ip
 from app.utils.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
+from app.utils.token_revocation import is_revoked, revoke
 
 router = APIRouter()
 
@@ -51,6 +58,27 @@ async def _record_login_failure(db, ip: str, username: str, role: str) -> None:
         "username": username,
         "created_at": datetime.now(timezone.utc),
     })
+
+
+def _extract_bearer_token(request: Request) -> str | None:
+    auth_header = request.headers.get("authorization", "")
+    scheme, _, token = auth_header.partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+    token = token.strip()
+    return token or None
+
+
+def _extract_logout_tokens(request: Request) -> list[str]:
+    tokens: list[str] = []
+    for raw in (
+        _extract_bearer_token(request),
+        request.cookies.get(access_cookie_name("admin")),
+        request.cookies.get(refresh_cookie_name("admin")),
+    ):
+        if raw and raw not in tokens:
+            tokens.append(raw)
+    return tokens
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -98,6 +126,11 @@ async def refresh(
     data = decode_token(raw_refresh)
     if not data or data.get("role") != "admin":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    if await is_revoked(db, data.get("jti")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "token_revoked"},
+        )
     subject = data.get("sub")
     if not isinstance(subject, str) or not subject:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
@@ -136,9 +169,14 @@ async def change_password(
 @router.post("/logout", response_model=MessageResponse)
 async def logout(
     response: Response,
+    request: Request,
     current_admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
+    for raw_token in _extract_logout_tokens(request):
+        payload = decode_token(raw_token)
+        if payload:
+            await revoke(db, payload.get("jti"), payload.get("exp"))
     await db.admins.update_one(
         {"_id": current_admin["_id"]},
         {"$set": {"last_logout_at": datetime.now(timezone.utc)}},

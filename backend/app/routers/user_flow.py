@@ -681,6 +681,21 @@ async def complete(
                 pass
         return {"success": False, "message": "This phone number has already claimed a prize."}
 
+    receipt_token = secrets.token_urlsafe(24)
+    receipt_created_at = datetime.now(timezone.utc)
+    await db.claim_receipts.insert_one({
+        "receipt_token": receipt_token,
+        "claim_id": result.inserted_id,
+        "campaign_id": cid,
+        "staff_id": staff["_id"],
+        "prize_type": item["type"],
+        "reward_code": reward_code,
+        "redirect_url": redirect_url if item["type"] == "website" else "",
+        "phone": phone,
+        "created_at": receipt_created_at,
+        "expires_at": receipt_created_at + timedelta(days=30),
+    })
+
     if session:
         await db.promo_sessions.update_one(
             {"_id": session["_id"]},
@@ -698,6 +713,7 @@ async def complete(
         "redirect_url": redirect_url if item["type"] == "website" else None,
         "message": "Prize claimed successfully!",
         "result_token": sign_result_token(str(result.inserted_id)),
+        "receipt_token": receipt_token,
     }
 
 
@@ -831,4 +847,22 @@ async def get_result(
         "reward_code": claim.get("reward_code"), "status": claim["status"],
         "created_at": claim["created_at"].isoformat() if claim.get("created_at") else "",
         "redirect_url": redirect_url,
+    }
+
+
+@router.get("/receipt/{token}")
+async def get_receipt(
+    token: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    doc = await db.claim_receipts.find_one({"receipt_token": token})
+    if not doc:
+        raise HTTPException(status_code=404, detail="receipt_not_found")
+    return {
+        "claim_id": str(doc["claim_id"]),
+        "prize_type": doc.get("prize_type", ""),
+        "reward_code": doc.get("reward_code") or "",
+        "redirect_url": doc.get("redirect_url") or "",
+        "phone": doc.get("phone") or "",
+        "created_at": doc["created_at"].isoformat() if doc.get("created_at") else "",
     }
