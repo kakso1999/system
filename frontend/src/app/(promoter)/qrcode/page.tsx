@@ -12,8 +12,17 @@ interface LiveQrState {
   pin: string;
   expires_at: string;
   qr_version: number;
+  status?: string;
   loading: boolean;
   error: string;
+}
+
+interface LiveQrPayload {
+  qr_data?: string;
+  pin?: string;
+  expires_at?: string;
+  qr_version?: number;
+  status?: string;
 }
 
 const initialState: LiveQrState = {
@@ -21,6 +30,7 @@ const initialState: LiveQrState = {
   pin: "",
   expires_at: "",
   qr_version: 0,
+  status: "",
   loading: true,
   error: "",
 };
@@ -35,6 +45,10 @@ function isTooManyRefresh(error: unknown) {
   const detail = axiosErr.response?.data?.detail;
   const code = typeof detail === "object" ? detail.code : detail;
   return axiosErr.response?.status === 429 && code === "too_many_refresh";
+}
+
+function getResponseStatus(error: unknown) {
+  return (error as { response?: { status?: number } }).response?.status;
 }
 
 function QrDisplay({ qrUrl, sizeClass }: { qrUrl: string; sizeClass: string }) {
@@ -222,6 +236,7 @@ export default function QRCodePage() {
   const [note, setNote] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
   const lastGenerateAt = useRef(0);
+  const statusPollingAvailable = useRef(true);
 
   const qrUrl = state.qr_data ? `${origin}${state.qr_data}` : "";
 
@@ -242,15 +257,39 @@ export default function QRCodePage() {
     return () => clearInterval(timer);
   }, [state.expires_at]);
 
-  const generateLiveQr = async () => {
+  useEffect(() => {
+    if (!state.qr_data || !statusPollingAvailable.current) return;
+    const timer = setInterval(() => { void refreshLiveQr(); }, 3000);
+    return () => clearInterval(timer);
+  }, [state.qr_data]);
+
+  useEffect(() => {
+    if (state.status !== "consumed") return;
+    void generateLiveQr(true);
+  }, [state.status]);
+
+  const applyLiveQrPayload = (payload: LiveQrPayload) => {
+    setState((prev) => ({
+      ...prev,
+      qr_data: payload.qr_data ?? prev.qr_data,
+      pin: payload.pin ?? prev.pin,
+      expires_at: payload.expires_at ?? prev.expires_at,
+      qr_version: payload.qr_version ?? prev.qr_version,
+      status: payload.status ?? "active",
+      loading: false,
+      error: "",
+    }));
+  };
+
+  const generateLiveQr = async (force = false) => {
     const now = Date.now();
-    if (now - lastGenerateAt.current < 1000) return;
+    if (!force && now - lastGenerateAt.current < 1000) return;
     lastGenerateAt.current = now;
     setState((prev) => ({ ...prev, loading: true, error: "" }));
     setNote("");
     try {
-      const res = await api.post("/api/promoter/live-qr/generate");
-      setState({ ...res.data, loading: false, error: "" });
+      const res = await api.post<LiveQrPayload>("/api/promoter/live-qr/generate", {});
+      applyLiveQrPayload(res.data);
     } catch (err: unknown) {
       if (isTooManyRefresh(err)) {
         setNote("Please wait a moment");
@@ -258,6 +297,19 @@ export default function QRCodePage() {
         setState((prev) => ({ ...prev, error: "Unable to refresh live QR. Please try again." }));
       }
       setState((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  const refreshLiveQr = async () => {
+    if (!statusPollingAvailable.current) return;
+    try {
+      const res = await api.get<LiveQrPayload>("/api/promoter/live-qr");
+      applyLiveQrPayload(res.data);
+    } catch (err: unknown) {
+      const status = getResponseStatus(err);
+      if (status === 404 || status === 405) {
+        statusPollingAvailable.current = false;
+      }
     }
   };
 

@@ -57,6 +57,17 @@ function claimMessage(error: unknown) {
 
 type ClaimResponse = ClaimResultData & { result_token: string };
 
+function normalizeLocalPhone(value: string) {
+  let digits = value.replace(/\D/g, "");
+  if (digits.startsWith("63")) digits = digits.slice(2);
+  if (digits.startsWith("0")) digits = digits.slice(1);
+  return digits.slice(0, 10);
+}
+
+function withPhilippinesPrefix(localPhone: string) {
+  return `+63${localPhone}`;
+}
+
 export default function WheelPage() {
   const params = useParams();
   const router = useRouter();
@@ -191,10 +202,10 @@ export default function WheelPage() {
   };
 
   const handleVerifyPhone = async () => {
-    if (!phone) return;
+    if (phone.length !== 10) return;
     setVerifying(true);
     try {
-      const res = await api.post("/api/claim/verify-phone", { phone, campaign_id: campaignId });
+      const res = await api.post("/api/claim/verify-phone", { phone: withPhilippinesPrefix(phone), campaign_id: campaignId });
       if (res.data.verified) setPhoneVerified(true);
       else if (res.data.otp_sent) {
         setOtpSent(true);
@@ -213,7 +224,7 @@ export default function WheelPage() {
     if (otpCode.length !== 6) return;
     setVerifying(true);
     try {
-      const res = await api.post("/api/claim/verify-otp", { phone, code: otpCode, campaign_id: campaignId });
+      const res = await api.post("/api/claim/verify-otp", { phone: withPhilippinesPrefix(phone), code: otpCode, campaign_id: campaignId });
       if (res.data.verified) setPhoneVerified(true);
       else alert(res.data.message);
     } catch {
@@ -227,7 +238,7 @@ export default function WheelPage() {
     if (!result || !phoneVerified || !spinToken) return;
     setClaiming(true);
     try {
-      const payload = { campaign_id: campaignId, staff_code: code, phone, device_fingerprint: deviceFp, spin_token: spinToken };
+      const payload = { campaign_id: campaignId, staff_code: code, phone: withPhilippinesPrefix(phone), device_fingerprint: deviceFp, spin_token: spinToken };
       const res = sessionToken
         ? await api.post<ClaimResponse>("/api/claim/complete", payload, { headers: { "X-Session-Token": sessionToken } })
         : await api.post<ClaimResponse>("/api/claim/complete", payload);
@@ -249,12 +260,27 @@ export default function WheelPage() {
     }
   };
 
+  const handlePhoneChange = (value: string) => {
+    setPhone(normalizeLocalPhone(value));
+  };
+
+  const handleChangeNumber = () => {
+    setOtp(["", "", "", "", "", ""]);
+    setPhone("");
+    setPhoneVerified(false);
+    setOtpSent(false);
+    setOtpCooldown(0);
+    setVerifying(false);
+    setDemoCode(null);
+  };
+
   const handleOtpChange = (index: number, value: string) => {
-    if (value.length > 1) return;
+    const digit = value.replace(/\D/g, "");
+    if (digit.length > 1) return;
     const newOtp = [...otp];
-    newOtp[index] = value;
+    newOtp[index] = digit;
     setOtp(newOtp);
-    if (value && index < 5) document.getElementById(`otp-${index + 1}`)?.focus();
+    if (digit && index < 5) document.getElementById(`otp-${index + 1}`)?.focus();
   };
 
   const handleOtpKeyDown = (index: number, event: KeyboardEvent<HTMLInputElement>) => {
@@ -291,7 +317,7 @@ export default function WheelPage() {
             </button>
           )}
         </div>
-        {showResult && result && <ResultPanel result={result} claimResult={claimResult} redirectCountdown={redirectCountdown} sessionError={sessionError} phone={phone} otp={otp} smsEnabled={smsEnabled} phoneVerified={phoneVerified} otpSent={otpSent} verifying={verifying} claiming={claiming} otpCooldown={otpCooldown} onPhoneChange={setPhone} onOtpChange={handleOtpChange} onOtpKeyDown={handleOtpKeyDown} onVerifyPhone={handleVerifyPhone} onVerifyOtp={handleVerifyOtp} onClaim={handleClaim} />}
+        {showResult && result && <ResultPanel result={result} claimResult={claimResult} redirectCountdown={redirectCountdown} sessionError={sessionError} phone={phone} otp={otp} smsEnabled={smsEnabled} phoneVerified={phoneVerified} otpSent={otpSent} verifying={verifying} claiming={claiming} otpCooldown={otpCooldown} onPhoneChange={handlePhoneChange} onOtpChange={handleOtpChange} onOtpKeyDown={handleOtpKeyDown} onVerifyPhone={handleVerifyPhone} onVerifyOtp={handleVerifyOtp} onClaim={handleClaim} onChangeNumber={handleChangeNumber} />}
         <SponsorsCarousel variant="wheel" />
       </main>
 
@@ -319,6 +345,7 @@ function ResultPanel(props: {
   onVerifyPhone: () => void;
   onVerifyOtp: () => void;
   onClaim: () => void;
+  onChangeNumber: () => void;
 }) {
   if (props.result.wheel_item.type === "none") {
     return (

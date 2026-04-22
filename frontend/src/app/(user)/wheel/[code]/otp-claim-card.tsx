@@ -17,6 +17,7 @@ export interface OtpClaimCardProps {
   onVerifyPhone: () => void;
   onVerifyOtp: () => void;
   onClaim: () => void;
+  onChangeNumber?: () => void;
 }
 
 function PrimaryButton({ disabled, label, onClick }: { disabled: boolean; label: string; onClick: () => void }) {
@@ -76,22 +77,25 @@ export function OtpClaimCard(props: OtpClaimCardProps) {
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-outline uppercase tracking-widest mb-2 ml-1">Mobile Number</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant font-bold">+</span>
+            <div className="flex overflow-hidden rounded-xl bg-surface-container-low">
+              <span className="flex items-center border-r border-outline-variant/40 px-4 text-on-surface-variant font-bold">+63</span>
               <input
                 type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                pattern="^\\d{10}$"
                 value={props.phone}
-                onChange={(e) => props.onPhoneChange(e.target.value)}
-                placeholder="639171234567"
+                onChange={(e) => props.onPhoneChange(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                placeholder="9171234567"
                 disabled={props.phoneVerified || props.otpSent || blocked}
-                className="w-full bg-surface-container-low border-none rounded-xl py-4 pl-10 pr-4 text-on-surface font-semibold focus:ring-2 focus:ring-primary/40 transition-all placeholder:text-outline/50 disabled:opacity-60"
+                className="w-full border-none bg-transparent py-4 pl-4 pr-4 text-on-surface font-semibold focus:ring-2 focus:ring-primary/40 transition-all placeholder:text-outline/50 disabled:opacity-60"
               />
             </div>
           </div>
           {!props.phoneVerified && !props.otpSent && (
             <PrimaryButton
               onClick={props.onVerifyPhone}
-              disabled={props.verifying || !props.phone || blocked}
+              disabled={props.verifying || props.phone.length !== 10 || blocked}
               label={props.verifying ? "SENDING..." : (props.smsEnabled ? "SEND VERIFICATION CODE" : "VERIFY PHONE")}
             />
           )}
@@ -102,6 +106,11 @@ export function OtpClaimCard(props: OtpClaimCardProps) {
               <button onClick={props.onVerifyPhone} disabled={props.otpCooldown > 0 || props.verifying || blocked} className="w-full text-sm text-on-surface-variant font-semibold py-2 hover:text-primary transition-colors disabled:opacity-40">
                 {props.otpCooldown > 0 ? `Resend in ${props.otpCooldown}s` : "Resend Code"}
               </button>
+              {props.onChangeNumber && (
+                <button onClick={props.onChangeNumber} disabled={props.verifying || blocked} className="w-full text-sm text-on-surface-variant font-semibold py-1 hover:text-primary transition-colors disabled:opacity-40">
+                  Change number
+                </button>
+              )}
             </>
           )}
           {props.phoneVerified && (
