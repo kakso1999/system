@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pydantic import BaseModel, ConfigDict
 from pymongo import ReturnDocument
 
 from app.database import get_db
@@ -84,3 +85,45 @@ async def redeem_reward_code(
                     }},
                 )
     return {"success": True, "message": "Reward code redeemed successfully"}
+
+
+# ----------------------------------------------------------------------------
+# D1/D2 - docx-aligned alias routes under /api/redeem/*. Thin delegates to the
+# existing X-API-Key-protected handlers above. Registered under a separate
+# router (see main.py) with the same get_api_key dependency.
+# ----------------------------------------------------------------------------
+
+
+class RedeemVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+
+
+class RedeemClaimRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+
+
+alias_router = APIRouter()
+
+
+@alias_router.post("/verify")
+async def redeem_verify(
+    payload: RedeemVerifyRequest,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: str = Depends(get_api_key),
+):
+    """D1 alias: verify reward code (body { code }). Mirrors /api/external/reward-code/{code}/check."""
+    return await check_reward_code(code=payload.code, db=db, _=_)
+
+
+@alias_router.post("/claim")
+async def redeem_claim(
+    payload: RedeemClaimRequest,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _: str = Depends(get_api_key),
+):
+    """D2 alias: claim/redeem reward code (body { code }). Mirrors /api/external/reward-code/{code}/redeem."""
+    return await redeem_reward_code(code=payload.code, db=db, _=_)
