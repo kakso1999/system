@@ -9,6 +9,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.utils.auth_cookies import access_cookie_name
 from app.utils.security import decode_token
+from app.utils.token_revocation import is_revoked
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -52,6 +53,11 @@ async def get_current_admin(
     payload = decode_token(token)
     if not payload or payload.get("role") != "admin":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    if await is_revoked(db, payload.get("jti")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "token_revoked"},
+        )
     admin = await db.admins.find_one({"_id": get_subject_object_id(payload)})
     if not admin:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
@@ -71,6 +77,11 @@ async def get_current_staff(
     payload = decode_token(token)
     if not payload or payload.get("role") != "staff":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    if await is_revoked(db, payload.get("jti")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "token_revoked"},
+        )
     staff = await db.staff_users.find_one({"_id": get_subject_object_id(payload)})
     if not staff:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Staff not found")

@@ -138,6 +138,12 @@ async def create_indexes():
     # sponsors
     await db.sponsors.create_index("enabled")
     await db.sponsors.create_index([("sort_order", 1), ("created_at", -1)])
+    # revoked_tokens
+    await db.revoked_tokens.create_index("jti", unique=True)
+    await db.revoked_tokens.create_index("expires_at", expireAfterSeconds=0)
+    # claim_receipts
+    await db.claim_receipts.create_index("receipt_token", unique=True)
+    await db.claim_receipts.create_index("expires_at", expireAfterSeconds=0)
 
 
 def get_db() -> AsyncIOMotorDatabase:

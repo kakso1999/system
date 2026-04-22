@@ -19,9 +19,16 @@ from app.schemas.staff import (
     LoginRequest,
     StaffRegisterRequest,
 )
-from app.utils.auth_cookies import clear_auth_cookies, set_auth_cookies, set_csrf_cookie
+from app.utils.auth_cookies import (
+    access_cookie_name,
+    clear_auth_cookies,
+    refresh_cookie_name,
+    set_auth_cookies,
+    set_csrf_cookie,
+)
 from app.utils.request_ip import extract_client_ip
 from app.utils.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
+from app.utils.token_revocation import is_revoked, revoke
 
 router = APIRouter()
 
@@ -70,6 +77,27 @@ async def _record_login_failure(db, ip: str, username: str, role: str) -> None:
         "username": username,
         "created_at": datetime.now(timezone.utc),
     })
+
+
+def _extract_bearer_token(request: Request) -> str | None:
+    auth_header = request.headers.get("authorization", "")
+    scheme, _, token = auth_header.partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+    token = token.strip()
+    return token or None
+
+
+def _extract_logout_tokens(request: Request) -> list[str]:
+    tokens: list[str] = []
+    for raw in (
+        _extract_bearer_token(request),
+        request.cookies.get(access_cookie_name("staff")),
+        request.cookies.get(refresh_cookie_name("staff")),
+    ):
+        if raw and raw not in tokens:
+            tokens.append(raw)
+    return tokens
 
 
 async def ensure_unique_staff_fields(
@@ -221,6 +249,11 @@ async def refresh(
     data = decode_token(raw_refresh)
     if not data or data.get("role") != "staff":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+    if await is_revoked(db, data.get("jti")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "token_revoked"},
+        )
     subject = data.get("sub")
     if not isinstance(subject, str) or not subject:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
@@ -334,9 +367,14 @@ async def change_password(
 @router.post("/logout", response_model=MessageResponse)
 async def logout(
     response: Response,
+    request: Request,
     current_staff: dict = Depends(get_current_staff),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
+    for raw_token in _extract_logout_tokens(request):
+        payload = decode_token(raw_token)
+        if payload:
+            await revoke(db, payload.get("jti"), payload.get("exp"))
     await db.staff_users.update_one(
         {"_id": current_staff["_id"]},
         {"$set": {"last_logout_at": datetime.now(timezone.utc)}},
