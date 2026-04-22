@@ -11,12 +11,12 @@ from pymongo.errors import DuplicateKeyError
 
 from app.database import get_db
 from app.services.commission import calculate_commissions
+from app.services.sms import DemoSMSProvider, build_provider
 from app.services.team_reward import check_team_rewards
 from app.services.vip import check_vip_upgrade
 from app.utils.live_token import generate_session_token
 from app.utils.request_ip import extract_client_ip
 from app.utils.security import sign_result_token, verify_result_token
-from app.utils.sms import send_sms
 
 router = APIRouter()
 
@@ -364,8 +364,6 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
     phone = payload.get("phone", "").strip()
     campaign_id = payload.get("campaign_id", "")
 
-    sms_on = await get_setting(db, "sms_verification")
-
     # Validate phone format
     phone = validate_phone(phone)
 
@@ -451,13 +449,12 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
     # Generate 6-digit OTP using cryptographically secure random
     code = str(secrets.randbelow(900000) + 100000)
 
-    # sms_verification ON = real SMS, OFF = demo mode (popup code)
-    if sms_on:
-        # Real SMS mode: send first, record only on success
-        sms_result = await send_sms(db, phone, code, "10")
-        if not sms_result["success"]:
-            return {"verified": False, "message": f"SMS send failed: {sms_result['message']}",
-                    "sms_error": True}
+    provider = await build_provider(db)
+    template = await get_setting(db, "sms_otp_template") or "[{signature}] OTP {code}"
+    signature = await get_setting(db, "sms_signature") or "GroundRewards"
+    sent_ok = await provider.send_otp(phone, code, template, signature)
+    if not sent_ok:
+        return {"verified": False, "message": "SMS send failed", "sms_error": True}
 
     # Record OTP (both demo and real modes)
     now = datetime.now(timezone.utc)
@@ -471,11 +468,11 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
         "created_at": now,
     })
 
-    if sms_on:
+    if not isinstance(provider, DemoSMSProvider):
         return {"verified": False, "message": "OTP sent", "otp_sent": True}
-    else:
-        # Demo mode: return code to frontend for display
-        return {"verified": False, "message": "OTP sent (test mode)", "otp_sent": True, "demo_code": code}
+
+    # Demo mode: return code to frontend for display
+    return {"verified": False, "message": "OTP sent (test mode)", "otp_sent": True, "demo_code": code}
 
 
 @router.post("/verify-otp")

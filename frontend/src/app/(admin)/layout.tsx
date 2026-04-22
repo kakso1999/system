@@ -67,6 +67,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     };
   }, [checkingAuth]);
 
+  useEffect(() => {
+    const syncCollapsed = () => {
+      setCollapsed(window.innerWidth < 768);
+    };
+
+    syncCollapsed();
+    window.addEventListener("resize", syncCollapsed);
+    return () => window.removeEventListener("resize", syncCollapsed);
+  }, []);
+
   const handleLogout = async () => {
     try {
       await api.post("/api/auth/admin/logout", {});

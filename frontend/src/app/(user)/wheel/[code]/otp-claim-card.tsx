@@ -1,5 +1,6 @@
 import type { KeyboardEvent } from "react";
 import { LockOpen } from "lucide-react";
+import { t } from "@/lib/i18n";
 
 export interface OtpClaimCardProps {
   phone: string;
@@ -41,7 +42,7 @@ function OtpGrid({
   return (
     <div>
       <label className="block text-xs font-bold text-outline uppercase tracking-widest mb-2 ml-1">Verification Code (6 digits)</label>
-      <div className="grid grid-cols-6 gap-2">
+      <div className="flex flex-wrap gap-2">
         {otp.map((digit, i) => (
           <input
             key={i}
@@ -53,7 +54,7 @@ function OtpGrid({
             disabled={disabled}
             onChange={(e) => onOtpChange(i, e.target.value)}
             onKeyDown={(e) => onOtpKeyDown(i, e)}
-            className="w-full bg-surface-container-low border-none rounded-xl py-4 text-center font-bold text-xl text-primary focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
+            className="w-[calc((100%-1rem)/3)] sm:w-[calc((100%-2.5rem)/6)] bg-surface-container-low border-none rounded-xl py-4 text-center font-bold text-xl text-primary focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
           />
         ))}
       </div>
@@ -63,6 +64,11 @@ function OtpGrid({
 
 export function OtpClaimCard(props: OtpClaimCardProps) {
   const blocked = Boolean(props.sessionError);
+  const sendCodeLabel = t("otp.send_code");
+  const verifyLabel = t("otp.verify");
+  const resendLabel = props.otpCooldown > 0 ? t("otp.resend_in", { s: props.otpCooldown }) : t("otp.resend");
+  const changeNumberLabel = t("otp.change_number");
+
   return (
     <div className="bg-surface-container-lowest rounded-xl p-8 shadow-[0px_20px_40px_rgba(39,44,81,0.06)] relative overflow-hidden">
       <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -96,19 +102,19 @@ export function OtpClaimCard(props: OtpClaimCardProps) {
             <PrimaryButton
               onClick={props.onVerifyPhone}
               disabled={props.verifying || props.phone.length !== 10 || blocked}
-              label={props.verifying ? "SENDING..." : (props.smsEnabled ? "SEND VERIFICATION CODE" : "VERIFY PHONE")}
+              label={props.verifying ? "SENDING..." : (props.smsEnabled ? sendCodeLabel : "VERIFY PHONE")}
             />
           )}
           {props.otpSent && !props.phoneVerified && (
             <>
               <OtpGrid otp={props.otp} disabled={blocked} onOtpChange={props.onOtpChange} onOtpKeyDown={props.onOtpKeyDown} />
-              <PrimaryButton onClick={props.onVerifyOtp} disabled={props.verifying || props.otp.join("").length !== 6 || blocked} label={props.verifying ? "VERIFYING..." : "VERIFY CODE"} />
+              <PrimaryButton onClick={props.onVerifyOtp} disabled={props.verifying || props.otp.join("").length !== 6 || blocked} label={props.verifying ? "VERIFYING..." : verifyLabel} />
               <button onClick={props.onVerifyPhone} disabled={props.otpCooldown > 0 || props.verifying || blocked} className="w-full text-sm text-on-surface-variant font-semibold py-2 hover:text-primary transition-colors disabled:opacity-40">
-                {props.otpCooldown > 0 ? `Resend in ${props.otpCooldown}s` : "Resend Code"}
+                {resendLabel}
               </button>
               {props.onChangeNumber && (
                 <button onClick={props.onChangeNumber} disabled={props.verifying || blocked} className="w-full text-sm text-on-surface-variant font-semibold py-1 hover:text-primary transition-colors disabled:opacity-40">
-                  Change number
+                  {changeNumberLabel}
                 </button>
               )}
             </>

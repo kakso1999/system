@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, ChevronRight, Gift, Star, Sparkles } from "lucide-react";
 import confetti from "canvas-confetti";
 import api, { resolveApiUrl } from "@/lib/api";
+import LangSwitcher from "@/components/lang-switcher";
 import { getPublicSettings, type PublicSettings } from "@/lib/public-settings";
 import { readSessionToken, writeSessionToken } from "@/lib/session-token";
 
@@ -113,8 +114,11 @@ export default function WelcomePage() {
     return (
       <div className="min-h-screen bg-surface flex flex-col">
         <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
-          <div className="flex justify-center items-center h-16">
+          <div className="relative flex justify-center items-center h-16 px-4">
             <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">{publicSettings?.project_name || "GroundRewards"}</h1>
+            <div className="absolute right-4 top-1/2 -translate-y-1/2">
+              <LangSwitcher />
+            </div>
           </div>
         </header>
 
@@ -168,8 +172,11 @@ export default function WelcomePage() {
     return (
       <div className="min-h-screen bg-surface flex flex-col">
         <header className="fixed top-0 w-full z-50 bg-white/70 backdrop-blur-md shadow-sm">
-          <div className="flex justify-center items-center h-16">
+          <div className="relative flex justify-center items-center h-16 px-4">
             <h1 className="text-xl font-bold tracking-tighter text-primary font-[var(--font-headline)]">{publicSettings?.project_name || "GroundRewards"}</h1>
+            <div className="absolute right-4 top-1/2 -translate-y-1/2">
+              <LangSwitcher />
+            </div>
           </div>
         </header>
 
