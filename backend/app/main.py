@@ -182,6 +182,7 @@ from app.routers import admin_auth, staff_auth, campaigns, wheel, reward_codes, 
 from app.routers import staff, claims, user_flow, risk_control, settings as settings_router
 from app.routers import promoter, finance, dashboard, external, bonus, registrations, sponsors, public_settings, qr
 from app.routers import promotion_activity
+from app.routers import vip_admin, team_rewards_admin, manual_commission, exports
 from app.utils.csrf import require_csrf
 from fastapi import Depends
 
@@ -213,6 +214,10 @@ app.include_router(sponsors.router, prefix="/api/admin/sponsors", tags=["Sponsor
 app.include_router(sponsors.public_router, prefix="/api/sponsors", tags=["Sponsors Public"])
 app.include_router(public_settings.router, prefix="/api/public", tags=["Public Settings"])
 app.include_router(qr.router, prefix="/api/public", tags=["Public QR"])
+app.include_router(vip_admin.router, prefix="/api/admin/vip", tags=["VIP Admin"], dependencies=_csrf_guard)
+app.include_router(team_rewards_admin.router, prefix="/api/admin/team-rewards", tags=["Team Rewards"], dependencies=_csrf_guard)
+app.include_router(manual_commission.router, prefix="/api/admin/commissions", tags=["Manual Commission"], dependencies=_csrf_guard)
+app.include_router(exports.router, prefix="/api/admin/exports", tags=["Exports"], dependencies=_csrf_guard)
 
 # Static files for uploaded images
 upload_dir = Path(__file__).parent.parent / "uploads"
