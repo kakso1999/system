@@ -16,6 +16,7 @@ from app.schemas.campaign import (
     CampaignUpdateRequest,
 )
 from app.schemas.common import MessageResponse, PageResponse
+from app.schemas.requests import CampaignMutationRequest
 from app.utils.helpers import to_str_id, to_str_ids
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
@@ -118,11 +119,11 @@ async def update_campaign_status(
 @router.post("/{campaign_id}/bind-staff", response_model=MessageResponse)
 async def bind_staff_to_campaign(
     campaign_id: str,
-    payload: dict,
+    payload: CampaignMutationRequest,
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
     campaign = await get_campaign_or_404(db, campaign_id)
-    staff_ids = payload.get("staff_ids", [])
+    staff_ids = payload.staff_ids
     if not isinstance(staff_ids, list):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="staff_ids must be a list")
     invalid_staff_ids = [sid for sid in staff_ids if not isinstance(sid, str) or not ObjectId.is_valid(sid)]

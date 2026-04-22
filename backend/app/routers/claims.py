@@ -7,6 +7,7 @@ from pymongo import ReturnDocument
 from app.database import get_db
 from app.dependencies import get_current_admin
 from app.schemas.common import PageResponse
+from app.schemas.requests import ClaimActionRequest
 from app.services.withdrawals import log_finance_action
 from app.utils.csv_export import csv_stream
 from app.utils.helpers import to_str_id
@@ -144,7 +145,7 @@ async def export_claims(db: AsyncIOMotorDatabase = Depends(get_db)):
 @router.post("/{claim_id}/cancel")
 async def cancel_claim(
     claim_id: str,
-    payload: dict,
+    payload: ClaimActionRequest,
     admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
@@ -152,7 +153,7 @@ async def cancel_claim(
     claim = await db.claims.find_one({"_id": oid})
     if not claim:
         raise HTTPException(status_code=404, detail="Claim not found")
-    reason = str(payload.get("reason", "")).strip()
+    reason = str(payload.reason).strip()
     if not reason:
         raise HTTPException(status_code=400, detail="Cancel reason is required")
     allowed_sources = ["pending_redeem", "unpaid", "frozen"]

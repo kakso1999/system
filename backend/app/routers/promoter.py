@@ -7,6 +7,7 @@ from pymongo import ReturnDocument
 from app.database import get_db
 from app.dependencies import get_current_staff
 from app.schemas.common import PageResponse
+from app.schemas.requests import PayoutAccountRequest, WithdrawalCreateRequest
 from app.services.withdrawals import (
     create_withdrawal_request,
     fetch_withdrawal_page,
@@ -183,7 +184,7 @@ async def payout_accounts(
 
 @router.post("/payout-accounts")
 async def add_payout_account(
-    payload: dict,
+    payload: PayoutAccountRequest,
     current_staff: dict = Depends(get_current_staff),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
@@ -191,10 +192,10 @@ async def add_payout_account(
     has_default = await db.staff_payout_accounts.find_one({"staff_id": current_staff["_id"], "is_default": True})
     document = {
         "staff_id": current_staff["_id"],
-        "type": payload.get("type", ""),
-        "account_name": payload.get("account_name", ""),
-        "account_number": payload.get("account_number", ""),
-        "bank_name": payload.get("bank_name", ""),
+        "type": payload.type,
+        "account_name": payload.account_name,
+        "account_number": payload.account_number,
+        "bank_name": payload.bank_name,
         "is_default": not bool(has_default),
         "created_at": now,
         "updated_at": now,
@@ -207,16 +208,16 @@ async def add_payout_account(
 @router.put("/payout-accounts/{account_id}")
 async def update_payout_account(
     account_id: str,
-    payload: dict,
+    payload: PayoutAccountRequest,
     current_staff: dict = Depends(get_current_staff),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     oid = parse_object_id(account_id, "Invalid account id")
     update_data = {
-        "type": payload.get("type", ""),
-        "account_name": payload.get("account_name", ""),
-        "account_number": payload.get("account_number", ""),
-        "bank_name": payload.get("bank_name", ""),
+        "type": payload.type,
+        "account_name": payload.account_name,
+        "account_number": payload.account_number,
+        "bank_name": payload.bank_name,
         "updated_at": datetime.now(timezone.utc),
     }
     result = await db.staff_payout_accounts.update_one({"_id": oid, "staff_id": current_staff["_id"]}, {"$set": update_data})
@@ -263,19 +264,19 @@ async def set_default_payout_account(
 
 @router.post("/withdrawal-requests")
 async def create_withdrawal(
-    payload: dict,
+    payload: WithdrawalCreateRequest,
     current_staff: dict = Depends(get_current_staff),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     try:
-        amount = float(payload.get("amount", 0))
+        amount = float(payload.amount)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail="Invalid amount") from exc
     if not math.isfinite(amount):
         raise HTTPException(status_code=400, detail="Invalid amount")
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Withdrawal amount must be greater than 0")
-    payout_account_id = parse_object_id(payload.get("payout_account_id", ""), "Invalid payout account id")
+    payout_account_id = parse_object_id(payload.payout_account_id, "Invalid payout account id")
     balance = await get_withdrawal_balance_snapshot(db, current_staff["_id"])
     if amount > max(balance["available"], 0):
         raise HTTPException(status_code=400, detail="Withdrawal amount exceeds available balance")

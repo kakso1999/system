@@ -23,6 +23,7 @@ from app.schemas.bonus import (
     DailyBonusSettlementResponse,
     SuccessResponse,
 )
+from app.schemas.requests import BonusSettleBatchRequest
 from app.services.bonus import (
     create_bonus_commission_log,
     get_bonus_claim_context,
@@ -259,12 +260,12 @@ async def list_bonus_records(
 
 @router.post("/settle-batch", response_model=SuccessResponse)
 async def settle_bonus_batch(
-    payload: dict,
+    payload: BonusSettleBatchRequest,
     current_admin: dict = Depends(get_super_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> SuccessResponse:
     """Mark claimed bonus records as settled and write matching paid bonus commission logs."""
-    ids = payload.get("record_ids") or []
+    ids = payload.record_ids or []
     if not isinstance(ids, list) or not ids:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="record_ids required")
     oids: list[ObjectId] = []

@@ -8,6 +8,14 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_db
 from app.dependencies import get_current_admin
 from app.schemas.common import MessageResponse, PageResponse
+from app.schemas.requests import (
+    CombinedSettleRequest,
+    CommissionRejectRequest,
+    ManualSettleRequest,
+    SettlementBatchRequest,
+    WithdrawalCompleteRequest,
+    WithdrawalRejectRequest,
+)
 from app.services.commission import generate_commission_no
 from app.services.withdrawals import (
     fetch_withdrawal_page,
@@ -352,19 +360,19 @@ async def staff_performance(
 
 @router.post("/manual-settle")
 async def manual_settle(
-    payload: dict,
+    payload: ManualSettleRequest,
     admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    staff_id = parse_object_id(payload.get("staff_id", ""), "Invalid staff id")
+    staff_id = parse_object_id(payload.staff_id or "", "Invalid staff id")
     try:
-        amount = float(payload["amount"])
+        amount = float(payload.amount)
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid amount") from exc
     if not math.isfinite(amount) or amount < 0:
         raise HTTPException(status_code=400, detail="Settlement amount must be greater than or equal to 0")
     amount_cents = to_cents(amount)
-    remark = payload.get("remark", "")
+    remark = payload.remark
     staff = await db.staff_users.find_one({"_id": staff_id})
     if not staff:
         raise HTTPException(status_code=404, detail="Staff not found")
@@ -440,21 +448,21 @@ async def manual_settle(
 
 @router.post("/combined-settle", response_model=MessageResponse)
 async def combined_settle(
-    payload: dict,
+    payload: CombinedSettleRequest,
     current_admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
     """Settle direct commissions and, optionally, claimed bonus records for one staff."""
-    staff_id = payload.get("staff_id")
+    staff_id = payload.staff_id
     if not staff_id or not ObjectId.is_valid(staff_id):
         raise HTTPException(status_code=400, detail="staff_id required")
     sid = ObjectId(staff_id)
     cid = None
-    if payload.get("campaign_id"):
-        if not ObjectId.is_valid(payload["campaign_id"]):
+    if payload.campaign_id:
+        if not ObjectId.is_valid(payload.campaign_id):
             raise HTTPException(status_code=400, detail="Invalid campaign_id")
-        cid = ObjectId(payload["campaign_id"])
-    include_bonus = bool(payload.get("include_bonus", True))
+        cid = ObjectId(payload.campaign_id)
+    include_bonus = bool(payload.include_bonus)
     now = datetime.now(timezone.utc)
     settlement = await settle_staff_records(db, sid, now, include_bonus, cid)
     await log_admin_action(
@@ -478,17 +486,17 @@ async def combined_settle(
 
 @router.post("/settlement-batch", response_model=MessageResponse)
 async def create_settlement_batch(
-    payload: dict,
+    payload: SettlementBatchRequest,
     current_admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     """Generate a settlement batch across multiple staff at once."""
-    staff_ids = [ObjectId(value) for value in (payload.get("staff_ids") or []) if ObjectId.is_valid(value)]
+    staff_ids = [ObjectId(value) for value in (payload.staff_ids or []) if ObjectId.is_valid(value)]
     if not staff_ids:
         raise HTTPException(status_code=400, detail="staff_ids required")
     unique_staff_ids = dedupe_object_ids(staff_ids)
-    include_bonus = bool(payload.get("include_bonus", True))
-    note = str(payload.get("note") or "")[:500]
+    include_bonus = bool(payload.include_bonus)
+    note = str(payload.note or "")[:500]
     now = datetime.now(timezone.utc)
     batch = {
         "admin_id": current_admin["_id"],
@@ -652,7 +660,7 @@ async def approve_commission(
 @router.put("/commission/{commission_id}/reject", response_model=MessageResponse)
 async def reject_commission(
     commission_id: str,
-    payload: dict,
+    payload: CommissionRejectRequest,
     admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
@@ -662,7 +670,7 @@ async def reject_commission(
         raise HTTPException(status_code=404, detail="Commission not found")
     if commission.get("status") != "pending":
         raise HTTPException(status_code=400, detail="Only pending commissions can be rejected")
-    reason = payload.get("reason", "").strip()
+    reason = payload.reason.strip()
     update_result = await db.commission_logs.update_one(
         {"_id": oid, "status": "pending"},
         {"$set": {"status": "rejected", "rejected_at": datetime.now(timezone.utc), "reject_reason": reason}},
@@ -767,7 +775,7 @@ async def approve_withdrawal(
 @router.put("/withdrawal-requests/{request_id}/reject", response_model=MessageResponse)
 async def reject_withdrawal(
     request_id: str,
-    payload: dict,
+    payload: WithdrawalRejectRequest,
     admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
@@ -775,7 +783,7 @@ async def reject_withdrawal(
     withdrawal = await get_withdrawal_or_404(db, oid)
     if withdrawal.get("status") != "pending":
         raise HTTPException(status_code=400, detail="Only pending withdrawal requests can be rejected")
-    reason = str(payload.get("reason", "")).strip()
+    reason = str(payload.reason).strip()
     if not reason:
         raise HTTPException(status_code=400, detail="Reject reason is required")
     update_result = await db.withdrawal_requests.update_one(
@@ -802,7 +810,7 @@ async def reject_withdrawal(
 @router.put("/withdrawal-requests/{request_id}/complete", response_model=MessageResponse)
 async def complete_withdrawal(
     request_id: str,
-    payload: dict,
+    payload: WithdrawalCompleteRequest,
     admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
@@ -810,10 +818,10 @@ async def complete_withdrawal(
     withdrawal = await get_withdrawal_or_404(db, oid)
     if withdrawal.get("status") != "approved":
         raise HTTPException(status_code=400, detail="Only approved withdrawal requests can be completed")
-    transaction_no = str(payload.get("transaction_no", "")).strip()
+    transaction_no = str(payload.transaction_no).strip()
     if not transaction_no:
         raise HTTPException(status_code=400, detail="Transaction number is required")
-    remark = str(payload.get("remark", "")).strip()
+    remark = str(payload.remark).strip()
     update_result = await db.withdrawal_requests.update_one(
         {"_id": oid, "status": "approved"},
         {"$set": {"status": "paid", "transaction_no": transaction_no, "remark": remark or None, "paid_at": datetime.now(timezone.utc), "paid_by": admin.get("username", "admin")}},

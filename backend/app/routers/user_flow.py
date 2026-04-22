@@ -10,6 +10,13 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from app.database import get_db
+from app.schemas.requests import (
+    ClaimCompleteRequest,
+    PinVerifyRequest,
+    SpinRequest,
+    VerifyOtpRequest,
+    VerifyPhoneRequest,
+)
 from app.services.commission import calculate_commissions
 from app.services.sms import DemoSMSProvider, build_provider
 from app.services.team_reward import check_team_rewards
@@ -251,13 +258,13 @@ async def welcome(
 
 @router.post("/spin")
 async def spin(
-    payload: dict,
+    payload: SpinRequest,
     request: Request,
     session_token_header: str | None = Header(None, alias="X-Session-Token"),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    staff_code = str(payload.get("staff_code", "")).strip().upper()
-    cid_str = payload.get("campaign_id", "")
+    staff_code = str(payload.staff_code).strip().upper()
+    cid_str = payload.campaign_id or ""
     if not staff_code:
         raise HTTPException(status_code=422, detail="staff_code is required")
 
@@ -269,7 +276,7 @@ async def spin(
     if staff.get("campaign_id") != campaign["_id"]:
         raise HTTPException(status_code=400, detail="Campaign does not match promoter")
     if await get_setting(db, "live_qr_enabled"):
-        device_fp = request.headers.get("X-Device-Fingerprint", "") or str(payload.get("device_fingerprint", "") or "")
+        device_fp = request.headers.get("X-Device-Fingerprint", "") or str(payload.device_fingerprint or "")
         await _require_active_session(
             db,
             session_token_header,
@@ -360,9 +367,9 @@ async def spin(
 
 
 @router.post("/verify-phone")
-async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
-    phone = payload.get("phone", "").strip()
-    campaign_id = payload.get("campaign_id", "")
+async def verify_phone(payload: VerifyPhoneRequest, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    phone = payload.phone.strip()
+    campaign_id = payload.campaign_id
 
     # Validate phone format
     phone = validate_phone(phone)
@@ -476,13 +483,13 @@ async def verify_phone(payload: dict, request: Request, db: AsyncIOMotorDatabase
 
 
 @router.post("/verify-otp")
-async def verify_otp(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
-    campaign_id = payload.get("campaign_id", "")
+async def verify_otp(payload: VerifyOtpRequest, db: AsyncIOMotorDatabase = Depends(get_db)):
+    campaign_id = payload.campaign_id
     cid = safe_object_id(campaign_id)
     if cid is None:
         return {"verified": False, "message": "campaign_id required"}
-    phone = payload.get("phone", "").strip()
-    otp_code = payload.get("code", "").strip()
+    phone = payload.phone.strip()
+    otp_code = payload.code.strip()
     if not phone or not otp_code:
         return {"verified": False, "message": "Phone and OTP code are required"}
     try:
@@ -530,21 +537,21 @@ async def verify_otp(payload: dict, db: AsyncIOMotorDatabase = Depends(get_db)):
 
 @router.post("/complete")
 async def complete(
-    payload: dict,
+    payload: ClaimCompleteRequest,
     request: Request,
     background_tasks: BackgroundTasks,
     session_token_header: str | None = Header(None, alias="X-Session-Token"),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    cid = parse_object_id(payload.get("campaign_id", ""), "campaign_id")
+    cid = parse_object_id(payload.campaign_id or "", "campaign_id")
     campaign = await get_active_campaign_or_404(db, cid)
-    phone = validate_phone(payload.get("phone", ""))
-    spin_token = str(payload.get("spin_token", "")).strip()
+    phone = validate_phone(payload.phone)
+    spin_token = str(payload.spin_token).strip()
     if not spin_token:
         raise HTTPException(status_code=400, detail="spin_token_required")
     ip = extract_client_ip(request)
-    device_fp = payload.get("device_fingerprint", "")
-    staff_code = str(payload.get("staff_code", "")).strip().upper()
+    device_fp = payload.device_fingerprint
+    staff_code = str(payload.staff_code).strip().upper()
     if not staff_code:
         raise HTTPException(status_code=422, detail="staff_code is required")
     staff = await db.staff_users.find_one({"invite_code": staff_code})
@@ -554,10 +561,10 @@ async def complete(
         raise HTTPException(status_code=400, detail="Campaign does not match promoter")
     session = None
     if await get_setting(db, "live_qr_enabled"):
-        if not str(payload.get("device_fingerprint", "")).strip():
+        if not str(payload.device_fingerprint).strip():
             raise HTTPException(status_code=403, detail={"code": "device_fingerprint_required"})
         session = await _require_active_session(db, session_token_header, staff["_id"], campaign_oid=cid)
-        if session.get("device_fingerprint", "") != payload.get("device_fingerprint", ""):
+        if session.get("device_fingerprint", "") != payload.device_fingerprint:
             raise HTTPException(status_code=403, detail={"code": "session_device_mismatch"})
 
     now = datetime.now(timezone.utc)
@@ -715,13 +722,13 @@ async def complete(
 
 
 @router.post("/pin/verify")
-async def pin_verify(payload: dict, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
-    staff_code = str(payload.get("staff_code", "")).strip().upper()
-    pin = str(payload.get("pin", "")).strip()
-    fp = str(payload.get("device_fingerprint", "")).strip()
+async def pin_verify(payload: PinVerifyRequest, request: Request, db: AsyncIOMotorDatabase = Depends(get_db)):
+    staff_code = str(payload.staff_code).strip().upper()
+    pin = str(payload.pin).strip()
+    fp = str(payload.device_fingerprint).strip()
     if not fp:
         return {"success": False, "error": "device_fingerprint_required", "attempts_remaining": 0}
-    signature = str(payload.get("token_signature", "")).strip()
+    signature = str(payload.token_signature).strip()
     ip = extract_client_ip(request)
 
     if not staff_code or not pin or not signature:
