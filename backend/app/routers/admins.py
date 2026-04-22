@@ -18,6 +18,7 @@ from app.schemas.admin import (
     AdminUpdateRequest,
 )
 from app.schemas.common import MessageResponse
+from app.utils.action_log import log_admin_action
 from app.utils.helpers import to_str_id
 from app.utils.security import hash_password
 
@@ -135,6 +136,18 @@ async def create_admin(
         result = await db.admins.insert_one(document)
     except DuplicateKeyError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists") from exc
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "admin.create",
+        "admin",
+        result.inserted_id,
+        {
+            "username": payload.username,
+            "role": payload.role,
+            "status": payload.status,
+        },
+    )
     document["_id"] = result.inserted_id
     return AdminListItem.model_validate(serialize_admin(document))
 
@@ -164,6 +177,14 @@ async def update_admin(
         {"$set": updates},
         return_document=ReturnDocument.AFTER,
     )
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "admin.update",
+        "admin",
+        admin["_id"],
+        {"fields": [field for field in updates if field != "updated_at"]},
+    )
     return AdminListItem.model_validate(serialize_admin(updated))
 
 
@@ -182,6 +203,14 @@ async def update_admin_status(
         {"_id": admin["_id"]},
         {"$set": {"status": payload.status, "updated_at": datetime.now(timezone.utc)}},
     )
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "admin.update_status",
+        "admin",
+        admin["_id"],
+        {"from": admin.get("status"), "to": payload.status},
+    )
     return MessageResponse(message="Admin status updated successfully")
 
 
@@ -189,6 +218,7 @@ async def update_admin_status(
 async def reset_admin_password(
     admin_id: str,
     payload: AdminResetPasswordRequest,
+    current_admin: dict = Depends(get_super_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
     admin = await get_admin_or_404(db, admin_id)
@@ -201,6 +231,14 @@ async def reset_admin_password(
                 "updated_at": datetime.now(timezone.utc),
             }
         },
+    )
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "admin.reset_password",
+        "admin",
+        admin["_id"],
+        {"username": admin.get("username", "")},
     )
     return MessageResponse(message="Password reset successfully")
 
@@ -218,4 +256,12 @@ async def delete_admin(
     ensure_not_self(admin, current_admin, "Cannot delete own account")
     await ensure_active_super_admin_remains(db, admin, "delete")
     await db.admins.delete_one({"_id": admin["_id"]})
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "admin.delete",
+        "admin",
+        admin["_id"],
+        {"username": admin.get("username", ""), "role": admin.get("role", "")},
+    )
     return MessageResponse(message="Admin deleted successfully")

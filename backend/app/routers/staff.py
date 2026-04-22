@@ -29,7 +29,10 @@ from app.schemas.staff import (
     StaffStatusUpdateRequest,
     StaffUpdateRequest,
 )
+from app.utils.action_log import log_admin_action
+from app.utils.csv_export import csv_stream
 from app.utils.helpers import to_str_id
+from app.utils.money import from_cents
 from app.utils.security import hash_password
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
@@ -48,6 +51,25 @@ def serialize_staff(doc: dict) -> dict:
         if isinstance(data.get(key), ObjectId):
             data[key] = str(data[key])
     return data
+
+
+def staff_total_valid(doc: dict) -> int:
+    stats = doc.get("stats") or {}
+    try:
+        return int(stats.get("total_valid") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def staff_total_commission(doc: dict) -> float:
+    stats = doc.get("stats") or {}
+    cents = stats.get("total_commission_cents")
+    if cents is None:
+        return float(stats.get("total_commission") or 0)
+    try:
+        return from_cents(int(cents))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 async def get_staff_or_404(db: AsyncIOMotorDatabase, staff_id: str) -> dict:
@@ -166,6 +188,7 @@ async def list_staff(
 @router.post("/", response_model=StaffDetail, status_code=status.HTTP_201_CREATED)
 async def create_staff(
     payload: StaffCreateRequest,
+    current_admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> StaffDetail:
     await ensure_unique_staff_fields(db, payload.username, payload.phone)
@@ -190,6 +213,19 @@ async def create_staff(
         await create_relation_records(db, result.inserted_id, parent_id, created_at)
     except DuplicateKeyError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username, phone, or invite code already exists") from exc
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "staff.create",
+        "staff",
+        result.inserted_id,
+        {
+            "username": payload.username,
+            "phone": payload.phone,
+            "parent_id": str(parent_id) if parent_id else None,
+            "campaign_id": payload.campaign_id,
+        },
+    )
     document["_id"] = result.inserted_id
     return StaffDetail.model_validate(serialize_staff(document))
 
@@ -207,6 +243,58 @@ async def staff_tree(db: AsyncIOMotorDatabase = Depends(get_db)):
         node["children_count"] = await count_direct_children(db, staff["_id"])
         result.append(node)
     return result
+
+
+@router.get("/export")
+async def export_staff(db: AsyncIOMotorDatabase = Depends(get_db)):
+    cursor = db.staff_users.find(
+        {},
+        {
+            "staff_no": 1,
+            "name": 1,
+            "phone": 1,
+            "username": 1,
+            "vip_level": 1,
+            "status": 1,
+            "created_at": 1,
+            "stats.total_valid": 1,
+            "stats.total_commission": 1,
+            "stats.total_commission_cents": 1,
+        },
+    ).sort("created_at", -1)
+
+    async def rows():
+        async for doc in cursor:
+            yield [
+                str(doc.get("_id") or ""),
+                doc.get("staff_no", ""),
+                doc.get("name", ""),
+                doc.get("phone", ""),
+                doc.get("username", ""),
+                doc.get("vip_level", 0),
+                doc.get("status", ""),
+                doc["created_at"].isoformat() if doc.get("created_at") else "",
+                staff_total_valid(doc),
+                staff_total_commission(doc),
+            ]
+
+    items = [row async for row in rows()]
+    return csv_stream(
+        items,
+        [
+            "id",
+            "staff_no",
+            "name",
+            "phone",
+            "username",
+            "vip_level",
+            "status",
+            "created_at",
+            "total_valid",
+            "total_commission",
+        ],
+        "staff.csv",
+    )
 
 
 @router.get("/{staff_id}/children")
@@ -242,6 +330,7 @@ async def get_staff_detail(
 async def update_staff(
     staff_id: str,
     payload: StaffUpdateRequest,
+    current_admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> StaffDetail:
     staff = await get_staff_or_404(db, staff_id)
@@ -284,6 +373,14 @@ async def update_staff(
             {"staff_id": staff["_id"], "status": "active"},
             {"$set": {"status": "expired", "expired_at": datetime.now(timezone.utc), "expired_reason": "risk_frozen"}},
         )
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "staff.update",
+        "staff",
+        staff["_id"],
+        {"fields": [field for field in updates if field != "updated_at"]},
+    )
     return StaffDetail.model_validate(serialize_staff(updated))
 
 
@@ -291,6 +388,7 @@ async def update_staff(
 async def update_staff_status(
     staff_id: str,
     payload: StaffStatusUpdateRequest,
+    current_admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
     staff = await get_staff_or_404(db, staff_id)
@@ -304,12 +402,21 @@ async def update_staff_status(
             {"staff_id": staff["_id"], "status": "active"},
             {"$set": {"status": "expired", "expired_at": now, "expired_reason": "staff_status_change"}},
         )
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "staff.update_status",
+        "staff",
+        staff["_id"],
+        {"from": staff.get("status"), "to": payload.status},
+    )
     return MessageResponse(message="Staff status updated successfully")
 
 
 @router.post("/{staff_id}/pause", response_model=MessageResponse)
 async def admin_pause_staff(
     staff_id: str,
+    current_admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
     staff = await get_staff_or_404(db, staff_id)
@@ -328,12 +435,21 @@ async def admin_pause_staff(
         {"staff_id": staff["_id"], "status": "active"},
         {"$set": {"status": "expired", "expired_at": now, "expired_reason": "admin_pause"}},
     )
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "staff.pause",
+        "staff",
+        staff["_id"],
+        {"work_status": "paused"},
+    )
     return MessageResponse(message="Promoter paused by admin")
 
 
 @router.post("/{staff_id}/resume", response_model=MessageResponse)
 async def admin_resume_staff(
     staff_id: str,
+    current_admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
     staff = await get_staff_or_404(db, staff_id)
@@ -353,6 +469,14 @@ async def admin_resume_staff(
             "updated_at": now,
         }},
     )
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "staff.resume",
+        "staff",
+        staff["_id"],
+        {"work_status": "promoting"},
+    )
     return MessageResponse(message="Promoter resumed by admin")
 
 
@@ -360,6 +484,7 @@ async def admin_resume_staff(
 async def reset_staff_password(
     staff_id: str,
     payload: StaffResetPasswordRequest,
+    current_admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
     staff = await get_staff_or_404(db, staff_id)
@@ -372,16 +497,33 @@ async def reset_staff_password(
             }
         },
     )
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "staff.reset_password",
+        "staff",
+        staff["_id"],
+        {"username": staff.get("username", "")},
+    )
     return MessageResponse(message="Password reset successfully")
 
 
 @router.delete("/{staff_id}", response_model=MessageResponse)
 async def delete_staff(
     staff_id: str,
+    current_admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
     staff = await get_staff_or_404(db, staff_id)
     await ensure_staff_can_be_deleted(db, staff["_id"])
     await delete_staff_dependencies(db, staff["_id"])
     await db.staff_users.delete_one({"_id": staff["_id"]})
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "staff.delete",
+        "staff",
+        staff["_id"],
+        {"staff_no": staff.get("staff_no", ""), "username": staff.get("username", "")},
+    )
     return MessageResponse(message="Staff deleted successfully")

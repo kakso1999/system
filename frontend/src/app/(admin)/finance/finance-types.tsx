@@ -1,6 +1,6 @@
 import type { CommissionLog, Staff, WithdrawalRequest } from "@/types";
 
-export type TabKey = "staff" | "commissions" | "withdrawals" | "combined";
+export type TabKey = "staff" | "commissions" | "withdrawals" | "combined" | "reconcile";
 
 export interface FinanceOverview {
   total_commission: number;
@@ -25,6 +25,15 @@ export interface AdminWithdrawalRecord extends WithdrawalRequest {
   staff_name?: string;
   staff_no?: string;
   staff_phone?: string;
+}
+
+export interface ReconciliationSummary {
+  payable_cents: number;
+  paid_cents: number;
+  frozen_cents: number;
+  bonus_pending_count: number;
+  anomaly_count: number;
+  anomaly_sample: string[];
 }
 
 export function toPoints(value: number) {

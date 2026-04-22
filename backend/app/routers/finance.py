@@ -1,8 +1,10 @@
 import math
 from datetime import datetime, timezone
+
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
+
 from app.database import get_db
 from app.dependencies import get_current_admin
 from app.schemas.common import MessageResponse, PageResponse
@@ -13,7 +15,9 @@ from app.services.withdrawals import (
     log_finance_action,
     sum_amount_cents,
 )
-from app.utils.helpers import to_str_id, to_str_ids
+from app.utils.action_log import log_admin_action
+from app.utils.csv_export import csv_stream
+from app.utils.helpers import to_str_id
 from app.utils.money import from_cents, read_cents, to_cents
 
 router = APIRouter(dependencies=[Depends(get_current_admin)])
@@ -24,6 +28,17 @@ def parse_object_id(value: str, message: str) -> ObjectId:
         return ObjectId(value)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=message) from exc
+
+
+def dedupe_object_ids(values: list[ObjectId]) -> list[ObjectId]:
+    items: list[ObjectId] = []
+    seen: set[ObjectId] = set()
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        items.append(value)
+    return items
 
 
 def unpaid_settlement_filter() -> dict:
@@ -43,6 +58,133 @@ def serialize_finance_log(doc: dict) -> dict:
     data["amount_change"] = from_cents(cents)
     data.pop("amount_change_cents", None)
     return data
+
+
+def serialize_settlement_batch(doc: dict) -> dict:
+    data = to_str_id(doc)
+    total_commission_cents = int(doc.get("total_commission_cents") or 0)
+    return {
+        "id": data["id"],
+        "admin_id": data.get("admin_id"),
+        "note": data.get("note", ""),
+        "staff_ids": data.get("staff_ids", []),
+        "include_bonus": bool(data.get("include_bonus", True)),
+        "status": data.get("status", ""),
+        "created_at": data.get("created_at"),
+        "completed_at": data.get("completed_at"),
+        "total_commission": from_cents(total_commission_cents),
+        "total_commission_cents": total_commission_cents,
+        "total_bonus_count": int(doc.get("total_bonus_count") or 0),
+    }
+
+
+def build_paid_bonus_log(
+    record: dict,
+    staff_id: ObjectId,
+    amount_cents: int,
+    now: datetime,
+    batch_id: ObjectId | None,
+) -> dict:
+    document = {
+        "commission_no": generate_commission_no(),
+        "claim_id": None,
+        "type": "bonus",
+        "bonus_record_id": record["_id"],
+        "beneficiary_staff_id": staff_id,
+        "source_staff_id": staff_id,
+        "level": 0,
+        "amount_cents": amount_cents,
+        "amount": from_cents(amount_cents),
+        "status": "paid",
+        "created_at": now,
+        "paid_at": now,
+        "rate": 0.0,
+        "vip_level_at_time": 0,
+        "currency": "PHP",
+        "campaign_id": record.get("campaign_id"),
+    }
+    if batch_id is not None:
+        document["settlement_batch_id"] = batch_id
+    return document
+
+
+async def settle_bonus_records(
+    db: AsyncIOMotorDatabase,
+    staff_id: ObjectId,
+    now: datetime,
+    include_bonus: bool,
+    campaign_id: ObjectId | None = None,
+    batch_id: ObjectId | None = None,
+) -> int:
+    if not include_bonus:
+        return 0
+    bonus_filter = {"staff_id": staff_id, "status": "claimed"}
+    if campaign_id is not None:
+        bonus_filter["campaign_id"] = campaign_id
+    settled = 0
+    async for record in db.bonus_claim_records.find(bonus_filter):
+        amount_cents = int(record.get("amount_cents") or to_cents(record.get("amount") or 0))
+        update_fields = {"status": "settled", "settled_at": now}
+        if batch_id is not None:
+            update_fields["settlement_batch_id"] = batch_id
+        updated = await db.bonus_claim_records.find_one_and_update(
+            {"_id": record["_id"], "status": "claimed"},
+            {"$set": update_fields},
+        )
+        if updated is None:
+            continue
+        await db.commission_logs.insert_one(build_paid_bonus_log(record, staff_id, amount_cents, now, batch_id))
+        await db.staff_users.update_one(
+            {"_id": staff_id},
+            {"$inc": {"stats.total_commission": from_cents(amount_cents), "stats.total_commission_cents": amount_cents}},
+        )
+        settled += 1
+    return settled
+
+
+async def settle_staff_records(
+    db: AsyncIOMotorDatabase,
+    staff_id: ObjectId,
+    now: datetime,
+    include_bonus: bool,
+    campaign_id: ObjectId | None = None,
+    batch_id: ObjectId | None = None,
+) -> dict:
+    commission_filter = {"beneficiary_staff_id": staff_id, "status": "approved", "type": "direct"}
+    if campaign_id is not None:
+        commission_filter["campaign_id"] = campaign_id
+    commission_cents = await sum_amount_cents(db.commission_logs, commission_filter)
+    commission_update = {"status": "paid", "paid_at": now}
+    if batch_id is not None:
+        commission_update["settlement_batch_id"] = batch_id
+    commission_result = await db.commission_logs.update_many(commission_filter, {"$set": commission_update})
+    bonus_count = await settle_bonus_records(db, staff_id, now, include_bonus, campaign_id, batch_id)
+    return {
+        "commission_count": commission_result.modified_count,
+        "commission_cents": commission_cents,
+        "bonus_count": bonus_count,
+    }
+
+
+async def update_settlement_batch(
+    db: AsyncIOMotorDatabase,
+    batch_id: ObjectId,
+    status: str,
+    completed_at: datetime,
+    commission_cents: int,
+    bonus_count: int,
+) -> None:
+    await db.settlement_batches.update_one(
+        {"_id": batch_id},
+        {
+            "$set": {
+                "status": status,
+                "completed_at": completed_at,
+                "total_commission_cents": commission_cents,
+                "total_bonus_count": bonus_count,
+            }
+        },
+    )
 
 
 async def sum_claim_commission(db: AsyncIOMotorDatabase, query: dict) -> float:
@@ -97,6 +239,73 @@ async def overview(db: AsyncIOMotorDatabase = Depends(get_db)):
         "settlement_paid": await sum_claim_commission(db, {"settlement_status": "paid"}),
         "staff_count": await db.staff_users.count_documents({"status": "active"}),
     }
+
+
+@router.get("/export/commissions")
+async def export_commissions(db: AsyncIOMotorDatabase = Depends(get_db)):
+    cursor = db.commission_logs.find(
+        {},
+        {
+            "commission_no": 1,
+            "claim_id": 1,
+            "beneficiary_staff_id": 1,
+            "source_staff_id": 1,
+            "level": 1,
+            "type": 1,
+            "amount_cents": 1,
+            "status": 1,
+            "created_at": 1,
+            "paid_at": 1,
+        },
+    ).sort("created_at", -1)
+
+    async def rows():
+        async for doc in cursor:
+            yield [
+                doc.get("commission_no", ""),
+                str(doc.get("claim_id") or ""),
+                str(doc.get("beneficiary_staff_id") or ""),
+                str(doc.get("source_staff_id") or ""),
+                doc.get("level", ""),
+                doc.get("type", ""),
+                int(doc.get("amount_cents") or 0) / 100.0,
+                doc.get("status", ""),
+                doc["created_at"].isoformat() if doc.get("created_at") else "",
+                doc["paid_at"].isoformat() if doc.get("paid_at") else "",
+            ]
+
+    items = [row async for row in rows()]
+    return csv_stream(
+        items,
+        ["commission_no", "claim_id", "beneficiary", "source", "level", "type", "amount", "status", "created_at", "paid_at"],
+        "commissions.csv",
+    )
+
+
+@router.get("/export/withdrawals")
+async def export_withdrawals(db: AsyncIOMotorDatabase = Depends(get_db)):
+    cursor = db.withdrawal_requests.find(
+        {},
+        {"staff_id": 1, "amount_cents": 1, "amount": 1, "status": 1, "created_at": 1, "paid_at": 1},
+    ).sort("created_at", -1)
+
+    async def rows():
+        async for doc in cursor:
+            yield [
+                str(doc.get("_id") or ""),
+                str(doc.get("staff_id") or ""),
+                from_cents(int(doc.get("amount_cents") or to_cents(doc.get("amount") or 0))),
+                doc.get("status", ""),
+                doc["created_at"].isoformat() if doc.get("created_at") else "",
+                doc["paid_at"].isoformat() if doc.get("paid_at") else "",
+            ]
+
+    items = [row async for row in rows()]
+    return csv_stream(
+        items,
+        ["id", "staff_id", "amount", "status", "created_at", "paid_at"],
+        "withdrawals.csv",
+    )
 
 
 @router.get("/staff-performance", response_model=PageResponse)
@@ -218,12 +427,21 @@ async def manual_settle(
         amount=from_cents(settled_cents),
         remark=remark,
     )
+    await log_admin_action(
+        db,
+        admin["_id"],
+        "settlement.manual",
+        "staff",
+        staff_id,
+        {"claim_count": len(settle_claim_ids), "amount": from_cents(settled_cents), "remark": remark},
+    )
     return MessageResponse(message=f"Settled {len(settle_claim_ids)} claim records")
 
 
 @router.post("/combined-settle", response_model=MessageResponse)
 async def combined_settle(
     payload: dict,
+    current_admin: dict = Depends(get_current_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
     """Settle direct commissions and, optionally, claimed bonus records for one staff."""
@@ -237,58 +455,130 @@ async def combined_settle(
             raise HTTPException(status_code=400, detail="Invalid campaign_id")
         cid = ObjectId(payload["campaign_id"])
     include_bonus = bool(payload.get("include_bonus", True))
-
     now = datetime.now(timezone.utc)
-    commission_filter = {"beneficiary_staff_id": sid, "status": "approved", "type": "direct"}
-    if cid is not None:
-        commission_filter["campaign_id"] = cid
-    comm_result = await db.commission_logs.update_many(
-        commission_filter,
-        {"$set": {"status": "paid", "paid_at": now}},
+    settlement = await settle_staff_records(db, sid, now, include_bonus, cid)
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "settlement.combined",
+        "staff",
+        sid,
+        {
+            "campaign_id": str(cid) if cid else None,
+            "include_bonus": include_bonus,
+            "commission_count": settlement["commission_count"],
+            "commission_amount": from_cents(settlement["commission_cents"]),
+            "bonus_count": settlement["bonus_count"],
+        },
+    )
+    return MessageResponse(
+        message=f"Settled {settlement['commission_count']} commissions and {settlement['bonus_count']} bonus records"
     )
 
+
+@router.post("/settlement-batch", response_model=MessageResponse)
+async def create_settlement_batch(
+    payload: dict,
+    current_admin: dict = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    """Generate a settlement batch across multiple staff at once."""
+    staff_ids = [ObjectId(value) for value in (payload.get("staff_ids") or []) if ObjectId.is_valid(value)]
+    if not staff_ids:
+        raise HTTPException(status_code=400, detail="staff_ids required")
+    unique_staff_ids = dedupe_object_ids(staff_ids)
+    include_bonus = bool(payload.get("include_bonus", True))
+    note = str(payload.get("note") or "")[:500]
+    now = datetime.now(timezone.utc)
+    batch = {
+        "admin_id": current_admin["_id"],
+        "note": note,
+        "staff_ids": unique_staff_ids,
+        "include_bonus": include_bonus,
+        "status": "pending",
+        "created_at": now,
+        "completed_at": None,
+        "total_commission_cents": 0,
+        "total_bonus_count": 0,
+    }
+    batch_result = await db.settlement_batches.insert_one(batch)
+    commission_count = 0
+    commission_cents = 0
     bonus_count = 0
-    if include_bonus:
-        bonus_filter = {"staff_id": sid, "status": "claimed"}
-        if cid is not None:
-            bonus_filter["campaign_id"] = cid
-        async for rec in db.bonus_claim_records.find(bonus_filter):
-            amount_cents = int(rec.get("amount_cents") or to_cents(rec.get("amount") or 0))
-            flip = await db.bonus_claim_records.find_one_and_update(
-                {"_id": rec["_id"], "status": "claimed"},
-                {"$set": {"status": "settled", "settled_at": now}},
+    try:
+        for staff_id in unique_staff_ids:
+            settlement = await settle_staff_records(
+                db,
+                staff_id,
+                now,
+                include_bonus,
+                batch_id=batch_result.inserted_id,
             )
-            if flip is None:
-                continue
-            await db.commission_logs.insert_one({
-                "commission_no": generate_commission_no(),
-                "claim_id": None,
-                "type": "bonus",
-                "bonus_record_id": rec["_id"],
-                "beneficiary_staff_id": sid,
-                "source_staff_id": sid,
-                "level": 0,
-                "amount_cents": amount_cents,
-                "amount": from_cents(amount_cents),
-                "status": "paid",
-                "created_at": now,
-                "paid_at": now,
-                "rate": 0.0,
-                "vip_level_at_time": 0,
-                "currency": "PHP",
-                "campaign_id": rec.get("campaign_id"),
-            })
-            await db.staff_users.update_one(
-                {"_id": sid},
-                {"$inc": {
-                    "stats.total_commission": from_cents(amount_cents),
-                    "stats.total_commission_cents": amount_cents,
-                }},
-            )
-            bonus_count += 1
-    return MessageResponse(
-        message=f"Settled {comm_result.modified_count} commissions and {bonus_count} bonus records"
+            commission_count += settlement["commission_count"]
+            commission_cents += settlement["commission_cents"]
+            bonus_count += settlement["bonus_count"]
+    except Exception:
+        await update_settlement_batch(
+            db,
+            batch_result.inserted_id,
+            "failed",
+            datetime.now(timezone.utc),
+            commission_cents,
+            bonus_count,
+        )
+        raise
+    await update_settlement_batch(
+        db,
+        batch_result.inserted_id,
+        "completed",
+        now,
+        commission_cents,
+        bonus_count,
     )
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "settlement.batch",
+        "settlement_batch",
+        batch_result.inserted_id,
+        {
+            "staff_count": len(unique_staff_ids),
+            "include_bonus": include_bonus,
+            "note": note,
+            "commission_count": commission_count,
+            "commission_amount": from_cents(commission_cents),
+            "bonus_count": bonus_count,
+        },
+    )
+    return MessageResponse(message=f"Batch settled {commission_count} commissions and {bonus_count} bonus")
+
+
+@router.get("/settlement-batches")
+async def list_settlement_batches(db: AsyncIOMotorDatabase = Depends(get_db)):
+    cursor = db.settlement_batches.find().sort("created_at", -1).limit(100)
+    items = await cursor.to_list(length=100)
+    return [serialize_settlement_batch(item) for item in items]
+
+
+@router.get("/reconciliation")
+async def reconciliation(db: AsyncIOMotorDatabase = Depends(get_db)):
+    payable = await sum_amount_cents(db.commission_logs, {"status": "approved"})
+    paid = await sum_amount_cents(db.commission_logs, {"status": "paid"})
+    frozen = await sum_amount_cents(db.commission_logs, {"status": "rejected"})
+    bonus_pending = await db.bonus_claim_records.count_documents({"status": "claimed"})
+    anomalies: list[str] = []
+    async for claim in db.claims.find({"status": "success"}, {"_id": 1}).limit(10000):
+        has_commission = await db.commission_logs.find_one({"claim_id": claim["_id"]}, {"_id": 1})
+        if not has_commission:
+            anomalies.append(str(claim["_id"]))
+    return {
+        "payable_cents": payable,
+        "paid_cents": paid,
+        "frozen_cents": frozen,
+        "bonus_pending_count": bonus_pending,
+        "anomaly_count": len(anomalies),
+        "anomaly_sample": anomalies[:20],
+    }
 
 
 @router.get("/settlement-records", response_model=PageResponse)
@@ -348,6 +638,14 @@ async def approve_commission(
         amount=from_cents(read_cents(commission)),
         remark="",
     )
+    await log_admin_action(
+        db,
+        admin["_id"],
+        "commission.approve",
+        "commission",
+        oid,
+        {"from": "pending", "to": "approved"},
+    )
     return MessageResponse(message="Commission approved")
 
 
@@ -381,6 +679,14 @@ async def reject_commission(
         new_status="rejected",
         amount=from_cents(read_cents(commission)),
         remark=reason,
+    )
+    await log_admin_action(
+        db,
+        admin["_id"],
+        "commission.reject",
+        "commission",
+        oid,
+        {"from": "pending", "to": "rejected", "reason": reason},
     )
     return MessageResponse(message="Commission rejected")
 
@@ -447,6 +753,14 @@ async def approve_withdrawal(
         db, admin=admin, action="approve", target_type="withdrawal", target_id=oid,
         old_status="pending", new_status="approved", amount=from_cents(read_cents(withdrawal)), remark=""
     )
+    await log_admin_action(
+        db,
+        admin["_id"],
+        "withdrawal.approve",
+        "withdrawal",
+        oid,
+        {"from": "pending", "to": "approved"},
+    )
     return MessageResponse(message="Withdrawal request approved")
 
 
@@ -473,6 +787,14 @@ async def reject_withdrawal(
     await log_finance_action(
         db, admin=admin, action="reject", target_type="withdrawal", target_id=oid,
         old_status="pending", new_status="rejected", amount=from_cents(read_cents(withdrawal)), remark=reason
+    )
+    await log_admin_action(
+        db,
+        admin["_id"],
+        "withdrawal.reject",
+        "withdrawal",
+        oid,
+        {"from": "pending", "to": "rejected", "reason": reason},
     )
     return MessageResponse(message="Withdrawal request rejected")
 

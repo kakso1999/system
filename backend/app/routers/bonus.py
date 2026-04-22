@@ -30,6 +30,7 @@ from app.services.bonus import (
     insert_bonus_claim_record,
     sorted_tiers,
 )
+from app.utils.action_log import log_admin_action
 from app.services.commission import generate_commission_no
 from app.utils.helpers import to_str_id
 from app.utils.money import from_cents, read_cents, to_cents
@@ -259,6 +260,7 @@ async def list_bonus_records(
 @router.post("/settle-batch", response_model=SuccessResponse)
 async def settle_bonus_batch(
     payload: dict,
+    current_admin: dict = Depends(get_super_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> SuccessResponse:
     """Mark claimed bonus records as settled and write matching paid bonus commission logs."""
@@ -308,6 +310,14 @@ async def settle_bonus_batch(
             }},
         )
         settled += 1
+    await log_admin_action(
+        db,
+        current_admin["_id"],
+        "bonus.settle_batch",
+        "bonus_claim_record",
+        None,
+        {"record_ids": ids, "settled_count": settled},
+    )
     return SuccessResponse(success=bool(settled))
 
 

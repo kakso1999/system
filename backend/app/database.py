@@ -85,6 +85,8 @@ async def create_indexes():
         partialFilterExpression={"type": "direct"},
     )
     await db.commission_logs.create_index("created_at")
+    await db.finance_action_logs.create_index([("admin_id", 1), ("created_at", -1)])
+    await db.finance_action_logs.create_index("target_type")
     # otp_records - TTL index
     await db.otp_records.create_index("expires_at", expireAfterSeconds=0)
     await db.otp_records.create_index([("phone", 1), ("expires_at", 1)])

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import api from "@/lib/api";
+import api, { resolveApiUrl } from "@/lib/api";
 import type { PageResponse } from "@/types";
 import CombinedSettleTab from "./combined-settle-tab";
 import CommissionRecordsSection from "./commission-records-section";
@@ -9,6 +9,7 @@ import type { AdminCommissionRecord, FinanceOverview, StaffPerformance, TabKey }
 import { toPoints } from "./finance-types";
 import ManualSettleModal from "./manual-settle-modal";
 import OverviewCards from "./overview-cards";
+import ReconciliationTab from "./reconciliation-tab";
 import RejectModal from "./reject-modal";
 import StaffPerformanceSection from "./staff-performance-section";
 import WithdrawalManagementTab from "./withdrawal-management-tab";
@@ -37,6 +38,13 @@ const settlementCards = [
   key: keyof Pick<FinanceOverviewWithSettlement, "settlement_pending" | "settlement_paid">;
   tone: string;
 }[];
+
+const exportLinks = [
+  { label: "佣金", href: "/api/admin/finance/export/commissions" },
+  { label: "提现", href: "/api/admin/finance/export/withdrawals" },
+  { label: "地推员", href: "/api/admin/staff/export" },
+  { label: "领取记录", href: "/api/admin/claims/export" },
+];
 
 export default function FinancePage() {
   const [activeTab, setActiveTab] = useState<TabKey>("staff");
@@ -176,9 +184,27 @@ export default function FinancePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-extrabold font-[var(--font-headline)] tracking-tight">财务结算</h1>
-        <p className="text-on-surface-variant mt-1">查看佣金概览、地推员业绩和佣金记录</p>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="text-3xl font-extrabold font-[var(--font-headline)] tracking-tight">财务结算</h1>
+          <p className="text-on-surface-variant mt-1">查看佣金概览、地推员业绩和佣金记录</p>
+        </div>
+        <details className="relative self-start">
+          <summary className="list-none cursor-pointer rounded-full bg-primary px-4 py-2 text-sm font-bold text-on-primary shadow-sm">
+            导出 CSV
+          </summary>
+          <div className="absolute right-0 z-10 mt-2 w-40 overflow-hidden rounded-xl bg-surface-container-lowest shadow-lg ring-1 ring-black/5">
+            {exportLinks.map((item) => (
+              <a
+                key={item.href}
+                href={resolveApiUrl(item.href)}
+                className="block px-4 py-3 text-sm font-medium text-on-surface hover:bg-surface-container-low"
+              >
+                {item.label}
+              </a>
+            ))}
+          </div>
+        </details>
       </div>
 
       <OverviewCards overview={overview} />
@@ -220,6 +246,12 @@ export default function FinancePage() {
         >
           提现管理
         </button>
+        <button
+          onClick={() => setActiveTab("reconcile")}
+          className={`rounded-full px-4 py-2 text-sm font-bold ${activeTab === "reconcile" ? "bg-primary text-on-primary" : "text-on-surface-variant"}`}
+        >
+          对账视图
+        </button>
       </section>
 
       {activeTab === "staff" && (
@@ -256,6 +288,10 @@ export default function FinancePage() {
 
       {activeTab === "withdrawals" && (
         <WithdrawalManagementTab />
+      )}
+
+      {activeTab === "reconcile" && (
+        <ReconciliationTab />
       )}
 
       {settleModal && (
