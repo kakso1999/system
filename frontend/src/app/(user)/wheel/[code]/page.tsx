@@ -55,7 +55,7 @@ function claimMessage(error: unknown) {
   return typeof detail === "string" ? detail : "Claim failed";
 }
 
-type ClaimResponse = ClaimResultData & { result_token: string };
+type ClaimResponse = ClaimResultData & { result_token: string; receipt_token?: string };
 
 function normalizeLocalPhone(value: string) {
   let digits = value.replace(/\D/g, "");
@@ -132,7 +132,9 @@ export default function WheelPage() {
   useEffect(() => {
     if (!claimResult?.success || !claimResult.claim_id || redirectCountdown === null) return;
     if (redirectCountdown <= 0) {
-      router.push(`/result/${claimResult.claim_id}`);
+      const rt = sessionStorage.getItem("receipt_token:" + claimResult.claim_id);
+      const qs = rt ? `?rt=${encodeURIComponent(rt)}` : "";
+      router.push(`/result/${claimResult.claim_id}${qs}`);
       return;
     }
     const timer = setTimeout(() => setRedirectCountdown(prev => (prev === null ? null : prev - 1)), 1000);
@@ -245,6 +247,9 @@ export default function WheelPage() {
       setClaimResult(res.data);
       if (res.data.success && res.data.claim_id) {
         sessionStorage.setItem("result_token:" + res.data.claim_id, res.data.result_token);
+        if (res.data.receipt_token) {
+          sessionStorage.setItem("receipt_token:" + res.data.claim_id, res.data.receipt_token);
+        }
         setRedirectCountdown(res.data.reward_code ? 5 : 2);
       }
     } catch (err: unknown) {

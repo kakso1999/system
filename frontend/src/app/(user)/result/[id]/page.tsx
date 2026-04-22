@@ -40,7 +40,38 @@ export default function ResultPage() {
   }, [claimId]);
 
   const loadResult = async () => {
-    const token = sessionStorage.getItem("result_token:" + claimId) || new URLSearchParams(window.location.search).get("result_token");
+    const qs = new URLSearchParams(window.location.search);
+    const receiptToken =
+      qs.get("rt") ||
+      qs.get("receipt_token") ||
+      sessionStorage.getItem("receipt_token:" + claimId);
+
+    if (receiptToken) {
+      try {
+        const res = await api.get(`/api/claim/receipt/${encodeURIComponent(receiptToken)}`);
+        const r = res.data;
+        setData({
+          id: r.claim_id || claimId,
+          prize_type: r.prize_type,
+          reward_code: r.reward_code || null,
+          status: "success",
+          created_at: r.created_at,
+          redirect_url: r.redirect_url || undefined,
+        });
+        return;
+      } catch (err: unknown) {
+        const axiosErr = err as { response?: { status?: number } };
+        if (axiosErr.response?.status !== 404) {
+          setError(RESULT_UNAVAILABLE);
+          return;
+        }
+        // fallthrough: try legacy result_token path
+      }
+    }
+
+    const token =
+      sessionStorage.getItem("result_token:" + claimId) ||
+      qs.get("result_token");
     if (!token) {
       setError(RESULT_UNAVAILABLE);
       return;
