@@ -447,7 +447,7 @@ export default function PromoterHomePage() {
         </div>
       </header>
 
-      <main className="pt-20 px-4 max-w-lg mx-auto space-y-6">
+      <main className="pt-20 px-4 sm:px-6 max-w-lg md:max-w-2xl mx-auto space-y-6">
         <section className="mt-4">
           <p className="text-on-surface-variant font-semibold text-sm">Welcome back, {s.name}</p>
           <h2 className="text-3xl font-extrabold font-[var(--font-headline)] tracking-tight mt-1">My Performance</h2>

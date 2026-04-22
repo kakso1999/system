@@ -307,7 +307,7 @@ export default function WheelPage() {
         {sessionError && <div className="mb-6 rounded-xl border border-error/10 bg-error/5 px-4 py-3 text-sm font-semibold text-error">{sessionError}</div>}
         <div className="relative w-full aspect-square mb-12 flex items-center justify-center">
           <div className="absolute inset-0 bg-primary/10 rounded-full blur-3xl" />
-          <div className="relative z-10 w-full h-full max-w-[320px] max-h-[320px] rounded-full p-2 bg-surface-container-lowest shadow-[0px_20px_40px_rgba(39,44,81,0.06)] border-[12px] border-surface-container">
+          <div className="relative z-10 w-full h-full max-w-[min(90vw,400px)] max-h-[min(90vw,400px)] rounded-full p-2 bg-surface-container-lowest shadow-[0px_20px_40px_rgba(39,44,81,0.06)] border-[12px] border-surface-container">
             <canvas ref={canvasRef} width={280} height={280} className="w-full h-full rounded-full" />
             <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-30"><ChevronDown className="w-12 h-12 text-error drop-shadow-md" /></div>
           </div>
