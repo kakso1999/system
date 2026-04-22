@@ -15,6 +15,14 @@ def normalize_code(code: str) -> str:
     return code.upper().strip()
 
 
+def mask_phone(phone: str) -> str:
+    if not phone:
+        return ""
+    if len(phone) <= 4:
+        return "*" * len(phone)
+    return phone[:3] + "*" * max(0, len(phone) - 7) + phone[-4:]
+
+
 @router.get("/reward-code/{code}/check")
 async def check_reward_code(
     code: str,
@@ -29,7 +37,7 @@ async def check_reward_code(
         "exists": True,
         "status": rc.get("status", "unknown"),
         "campaign_id": str(rc["campaign_id"]) if rc.get("campaign_id") else None,
-        "phone": rc.get("phone", ""),
+        "phone": mask_phone(rc.get("phone", "")),
         "created_at": rc["created_at"].isoformat() if rc.get("created_at") else None,
     }
 

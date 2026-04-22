@@ -639,6 +639,7 @@ async def complete(
         "commission_amount_cents": 0,
         "settled_at": None,
         "redirected": False, "status": "success", "risk_hit": [],
+        "promo_session_id": session["_id"] if session else None,
         "created_at": datetime.now(timezone.utc),
     }
 
@@ -656,7 +657,7 @@ async def complete(
     if session:
         await db.promo_sessions.update_one(
             {"_id": session["_id"]},
-            {"$set": {"status": "consumed", "consumed_at": datetime.now(timezone.utc)}},
+            {"$set": {"status": "consumed", "is_used": True, "consumed_at": datetime.now(timezone.utc)}},
         )
 
     await db.staff_users.update_one(
@@ -763,6 +764,7 @@ async def pin_verify(payload: dict, request: Request, db: AsyncIOMotorDatabase =
         "ip": ip,
         "user_agent": request.headers.get("user-agent", ""),
         "status": "active",
+        "is_used": False,
         "created_at": now,
         "expires_at": session_expires_at,
         "consumed_at": None,

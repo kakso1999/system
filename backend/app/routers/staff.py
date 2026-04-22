@@ -264,6 +264,10 @@ async def update_staff(
         "payout_account_name",
         "payout_account_number",
         "payout_notes",
+        "can_generate_qr",
+        "can_use_signed_link",
+        "allow_static_link",
+        "must_start_work",
     ):
         if field_name in payload.model_fields_set:
             updates[field_name] = getattr(payload, field_name)

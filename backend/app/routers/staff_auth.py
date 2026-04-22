@@ -220,6 +220,7 @@ async def refresh(
 @router.post("/register", response_model=MessageResponse)
 async def register(
     payload: StaffRegisterRequest,
+    request: Request,
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> MessageResponse:
     reg_doc = await db.system_settings.find_one({"key": "staff_register_enabled"})
@@ -258,6 +259,7 @@ async def register(
         "reviewed_at": None,
         "reviewed_by_admin_id": None,
         "approved_staff_id": None,
+        "source_ip": extract_client_ip(request),
     }
     try:
         await db.staff_registration_applications.insert_one(document)
@@ -290,6 +292,14 @@ async def change_password(
 
 
 @router.post("/logout", response_model=MessageResponse)
-async def logout(response: Response) -> MessageResponse:
+async def logout(
+    response: Response,
+    current_staff: dict = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> MessageResponse:
+    await db.staff_users.update_one(
+        {"_id": current_staff["_id"]},
+        {"$set": {"last_logout_at": datetime.now(timezone.utc)}},
+    )
     clear_auth_cookies(response, "staff")
     return MessageResponse(message="Logged out")

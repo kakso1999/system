@@ -10,6 +10,10 @@ type StaffControlForm = {
   payout_account_name: string;
   payout_account_number: string;
   payout_notes: string;
+  can_generate_qr: boolean;
+  can_use_signed_link: boolean;
+  allow_static_link: boolean;
+  must_start_work: boolean;
 };
 
 type TouchedControls = Partial<Record<keyof StaffControlForm, boolean>>;
@@ -22,6 +26,10 @@ type StaffWithControls = Staff & {
   payout_account_name?: string;
   payout_account_number?: string;
   payout_notes?: string;
+  can_generate_qr?: boolean;
+  can_use_signed_link?: boolean;
+  allow_static_link?: boolean;
+  must_start_work?: boolean;
 };
 
 function createControlForm(staff: Staff | null): StaffControlForm {
@@ -34,6 +42,10 @@ function createControlForm(staff: Staff | null): StaffControlForm {
     payout_account_name: editableStaff?.payout_account_name ?? "",
     payout_account_number: editableStaff?.payout_account_number ?? "",
     payout_notes: editableStaff?.payout_notes ?? "",
+    can_generate_qr: editableStaff?.can_generate_qr ?? true,
+    can_use_signed_link: editableStaff?.can_use_signed_link ?? true,
+    allow_static_link: editableStaff?.allow_static_link ?? true,
+    must_start_work: editableStaff?.must_start_work ?? false,
   };
 }
 
@@ -63,6 +75,10 @@ function buildEditPayload(
   if (touchedControls.payout_account_name) payload.payout_account_name = controls.payout_account_name;
   if (touchedControls.payout_account_number) payload.payout_account_number = controls.payout_account_number;
   if (touchedControls.payout_notes) payload.payout_notes = controls.payout_notes;
+  if (touchedControls.can_generate_qr) payload.can_generate_qr = controls.can_generate_qr;
+  if (touchedControls.can_use_signed_link) payload.can_use_signed_link = controls.can_use_signed_link;
+  if (touchedControls.allow_static_link) payload.allow_static_link = controls.allow_static_link;
+  if (touchedControls.must_start_work) payload.must_start_work = controls.must_start_work;
   return payload;
 }
 
@@ -207,6 +223,32 @@ export default function StaffFormModal(props: StaffFormModalProps) {
                       onChange={(e) => updateControl("payout_notes", e.target.value)}
                       className="w-full bg-surface-container-lowest border-none rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-primary/40"
                     />
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 rounded-xl bg-surface-container-lowest p-3">
+                    <label className="flex items-center gap-3 text-sm text-on-surface">
+                      <input type="checkbox" checked={controls.can_generate_qr}
+                        onChange={(e) => updateControl("can_generate_qr", e.target.checked)}
+                        className="h-4 w-4 rounded border-outline-variant text-primary focus:ring-primary/40" />
+                      <span>Can generate live QR</span>
+                    </label>
+                    <label className="flex items-center gap-3 text-sm text-on-surface">
+                      <input type="checkbox" checked={controls.can_use_signed_link}
+                        onChange={(e) => updateControl("can_use_signed_link", e.target.checked)}
+                        className="h-4 w-4 rounded border-outline-variant text-primary focus:ring-primary/40" />
+                      <span>Can use signed link</span>
+                    </label>
+                    <label className="flex items-center gap-3 text-sm text-on-surface">
+                      <input type="checkbox" checked={controls.allow_static_link}
+                        onChange={(e) => updateControl("allow_static_link", e.target.checked)}
+                        className="h-4 w-4 rounded border-outline-variant text-primary focus:ring-primary/40" />
+                      <span>Allow static /welcome link</span>
+                    </label>
+                    <label className="flex items-center gap-3 text-sm text-on-surface">
+                      <input type="checkbox" checked={controls.must_start_work}
+                        onChange={(e) => updateControl("must_start_work", e.target.checked)}
+                        className="h-4 w-4 rounded border-outline-variant text-primary focus:ring-primary/40" />
+                      <span>Must start work before QR</span>
+                    </label>
                   </div>
                 </div>
               </details>

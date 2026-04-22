@@ -134,7 +134,15 @@ async def change_password(
 
 
 @router.post("/logout", response_model=MessageResponse)
-async def logout(response: Response) -> MessageResponse:
+async def logout(
+    response: Response,
+    current_admin: dict = Depends(get_current_admin),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> MessageResponse:
+    await db.admins.update_one(
+        {"_id": current_admin["_id"]},
+        {"$set": {"last_logout_at": datetime.now(timezone.utc)}},
+    )
     clear_auth_cookies(response, "admin")
     clear_csrf_cookie(response)
     return MessageResponse(message="Logged out")

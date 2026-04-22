@@ -67,6 +67,10 @@ class StaffUpdateRequest(BaseModel):
     payout_account_name: str | None = None
     payout_account_number: str | None = None
     payout_notes: str | None = None
+    can_generate_qr: bool | None = None
+    can_use_signed_link: bool | None = None
+    allow_static_link: bool | None = None
+    must_start_work: bool | None = None
 
 
 class StaffStatusUpdateRequest(BaseModel):
@@ -131,6 +135,8 @@ class StaffListItem(BaseModel):
             "last_login_at",
         ):
             setattr(self, field_name, _ensure_utc(getattr(self, field_name)))
+        if hasattr(self, "last_logout_at"):
+            self.last_logout_at = _ensure_utc(self.last_logout_at)
         self.is_online = _is_online(self.last_seen_at)
         return self
 
@@ -147,3 +153,8 @@ class StaffDetail(StaffListItem):
     payout_account_name: str = ""
     payout_account_number: str = ""
     payout_notes: str = ""
+    can_generate_qr: bool = True
+    can_use_signed_link: bool = True
+    allow_static_link: bool = True
+    must_start_work: bool = False
+    last_logout_at: datetime | None = None

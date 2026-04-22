@@ -62,6 +62,7 @@ async def create_indexes():
     await db.claims.create_index([("phone", 1), ("campaign_id", 1), ("status", 1)])
     await db.claims.create_index("staff_id")
     await db.claims.create_index("settlement_status")
+    await db.claims.create_index("promo_session_id", sparse=True)
     await db.claims.create_index([("ip", 1), ("campaign_id", 1)])
     await db.claims.create_index(
         [("device_fingerprint", 1), ("campaign_id", 1)]

@@ -115,6 +115,9 @@ async def seed_settings():
         {"key": "staff_register_captcha_enabled", "value": False, "group": "staff_register", "description": "Require simple math captcha on staff register (frontend-rendered, backend-verified)"},
         {"key": "customer_service_whatsapp", "value": "", "group": "customer_service", "description": "WhatsApp link or number (e.g., https://wa.me/63XXXXXXXXXX)"},
         {"key": "customer_service_telegram", "value": "", "group": "customer_service", "description": "Telegram link (e.g., https://t.me/yourhandle)"},
+        {"key": "must_start_work_before_qr", "value": False, "group": "live_qr", "description": "If True, promoter must toggle work_status='promoting' before generating live QR/PIN"},
+        {"key": "allow_static_link", "value": True, "group": "live_qr", "description": "If False, the /welcome/{code} static link is rejected and only signed-link flow is allowed"},
+        {"key": "ip_rate_limit_enabled", "value": True, "group": "risk_control", "description": "Master switch for IP-based OTP/claim rate limits (ip_daily_limit, ip_window_min)"},
     ]
     for item in defaults:
         await db.system_settings.update_one(

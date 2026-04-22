@@ -79,11 +79,12 @@ function AdminModal(props: {
             </>
           )}
           <input type="text" value={form.display_name} onChange={(event) => onChange({ ...form, display_name: event.target.value })} placeholder="显示名" className="w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm" required />
+          <select value={form.role} onChange={(event) => onChange({ ...form, role: event.target.value as AdminRole })} className="w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm">
+            <option value="admin">管理员</option>
+            <option value="super_admin">超级管理员</option>
+          </select>
           {!isCreate && (
-            <select value={form.role} onChange={(event) => onChange({ ...form, role: event.target.value as AdminRole })} className="w-full rounded-xl border-none bg-surface-container-low px-4 py-3 text-sm">
-              <option value="admin">管理员</option>
-              <option value="super_admin">超级管理员</option>
-            </select>
+            <p className="text-xs text-on-surface-variant">提示：编辑时只能修改角色与显示名，不能改用户名。</p>
           )}
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 rounded-full border border-outline-variant py-3 text-sm font-bold text-on-surface-variant">取消</button>
@@ -253,7 +254,7 @@ function buildActions(state: AdminPageState): AdminActionHandlers {
 async function submitCreate(event: FormEvent, state: AdminPageState) {
   event.preventDefault();
   try {
-    await runMutation(state, api.post("/api/admin/admins/", { username: state.form.username, password: state.form.password, display_name: state.form.display_name }), state.closeCreate, "创建成功。新账号首次登录后必须修改密码。");
+    await runMutation(state, api.post("/api/admin/admins/", { username: state.form.username, password: state.form.password, display_name: state.form.display_name, role: state.form.role }), state.closeCreate, "创建成功。新账号首次登录后必须修改密码。");
   } catch (error) {
     alert(getErrorDetail(error, "创建管理员失败"));
   }

@@ -10,6 +10,7 @@ BonusRecordStatus = Literal["claimed", "settled"]
 class BonusTier(BaseModel):
     threshold: int = Field(..., gt=0)
     amount: float = Field(..., ge=0)
+    amount_cents: int | None = Field(default=None, ge=0)
 
 
 class BonusRuleUpsertRequest(BaseModel):
