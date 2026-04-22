@@ -1,0 +1,143 @@
+{
+  "total": 24,
+  "passed": 24,
+  "failed": 0,
+  "results": [
+    {
+      "name": "§H /_version returns 200",
+      "ok": true,
+      "status": 200,
+      "body": "{\"version\":\"2.5.0-f1\",\"waves\":[\"A1\",\"A2\",\"A3\",\"F1\"],\"features\":{\"cookie_only_auth\":false,\"cors_origi"
+    },
+    {
+      "name": "§A sponsors admin list",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "name": "§A sponsors public /active",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "name": "§A registrations list + pending-count",
+      "ok": true,
+      "list": 200,
+      "count": 200
+    },
+    {
+      "name": "§A rewards-overview dashboard",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "name": "§E admin bonus rules/records/settlements",
+      "ok": true,
+      "rules": 200,
+      "records": 200,
+      "settlements": 200
+    },
+    {
+      "name": "§A promotion activity logs",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "name": "§D /api/redeem/verify responds (any code != 500)",
+      "ok": true,
+      "status": 401,
+      "hasKey": false,
+      "body": "{\"detail\":\"Missing X-API-Key\"}"
+    },
+    {
+      "name": "§D /api/redeem/claim responds",
+      "ok": true,
+      "status": 401,
+      "body": "{\"detail\":\"Missing X-API-Key\"}"
+    },
+    {
+      "name": "§C /api/claim/pin/verify responds",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "name": "§B /api/promoter/live-qr/generate auth-gated (401 not 500)",
+      "ok": true,
+      "status": 401
+    },
+    {
+      "name": "§B /api/promoter/bonus/today auth-gated",
+      "ok": true,
+      "status": 401
+    },
+    {
+      "name": "§A admins CRUD list",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "name": "§C /mock-redeem page renders",
+      "ok": true,
+      "snippet": "GroundRewards\n\nNo reward code provided."
+    },
+    {
+      "name": "§A admin accounts page",
+      "ok": true,
+      "url": "http://localhost:3000/admins",
+      "snippet": "GroundRewards\nDashboard\n地推员管理\n管理员管理\n注册审核\n推广记录\n活动管理\n奖励视角\n领取记录\n冲单奖励\n赞助商\n财务结算\n风控设置\n"
+    },
+    {
+      "name": "§A sponsors page",
+      "ok": true,
+      "url": "http://localhost:3000/sponsors",
+      "snippet": "GroundRewards\nDashboard\n地推员管理\n管理员管理\n注册审核\n推广记录\n活动管理\n奖励视角\n领取记录\n冲单奖励\n赞助商\n财务结算\n风控设置\n"
+    },
+    {
+      "name": "§A staff-registration review page",
+      "ok": true,
+      "url": "http://localhost:3000/registrations",
+      "snippet": "GroundRewards\nDashboard\n地推员管理\n管理员管理\n注册审核\n推广记录\n活动管理\n奖励视角\n领取记录\n冲单奖励\n赞助商\n财务结算\n风控设置\n"
+    },
+    {
+      "name": "§G system settings page",
+      "ok": true,
+      "url": "http://localhost:3000/settings",
+      "snippet": "GroundRewards\nDashboard\n地推员管理\n管理员管理\n注册审核\n推广记录\n活动管理\n奖励视角\n领取记录\n冲单奖励\n赞助商\n财务结算\n风控设置\n"
+    },
+    {
+      "name": "§A rewards-overview UI",
+      "ok": true,
+      "url": "http://localhost:3000/rewards-overview",
+      "snippet": "GroundRewards\nDashboard\n地推员管理\n管理员管理\n注册审核\n推广记录\n活动管理\n奖励视角\n领取记录\n冲单奖励\n赞助商\n财务结算\n风控设置\n"
+    },
+    {
+      "name": "§A promotion-activity UI",
+      "ok": true,
+      "url": "http://localhost:3000/promotion-activity",
+      "snippet": "GroundRewards\nDashboard\n地推员管理\n管理员管理\n注册审核\n推广记录\n活动管理\n奖励视角\n领取记录\n冲单奖励\n赞助商\n财务结算\n风控设置\n"
+    },
+    {
+      "name": "§E claims records",
+      "ok": true,
+      "url": "http://localhost:3000/claims",
+      "snippet": "GroundRewards\nDashboard\n地推员管理\n管理员管理\n注册审核\n推广记录\n活动管理\n奖励视角\n领取记录\n冲单奖励\n赞助商\n财务结算\n风控设置\n"
+    },
+    {
+      "name": "§A finance combined-settle",
+      "ok": true,
+      "url": "http://localhost:3000/finance",
+      "snippet": "GroundRewards\nDashboard\n地推员管理\n管理员管理\n注册审核\n推广记录\n活动管理\n奖励视角\n领取记录\n冲单奖励\n赞助商\n财务结算\n风控设置\n"
+    },
+    {
+      "name": "§B staff-register page",
+      "ok": true,
+      "snippet": "GroundRewards\n\nJoin as Promoter\n\nName\nPhone\nUsername\nPassword\nConfirm Password\nInvite Code\n3 - 6 = ?"
+    },
+    {
+      "name": "§C /pin/<code> page renders (any state)",
+      "ok": true,
+      "snippet": "GroundRewards\nSECURE ACCESS\nEnter the PIN\n\nAsk the promoter for the 3-digit PIN "
+    }
+  ],
+  "consoleErrs": []
+}
