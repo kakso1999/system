@@ -1,4 +1,5 @@
 import random
+import secrets
 import string
 from datetime import datetime, timedelta, timezone
 
@@ -6,6 +7,7 @@ from bson import ObjectId
 from bson.errors import InvalidId
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from app.database import get_db
@@ -32,6 +34,7 @@ STAFF_STATS_TEMPLATE = {
     "level2_count": 0,
     "level3_count": 0,
 }
+CAPTCHA_INVALID_DETAIL = {"code": "captcha_invalid", "message": "Captcha incorrect or expired"}
 
 
 async def _enforce_login_throttle(db, ip: str, username: str, role: str) -> None:
@@ -157,6 +160,24 @@ async def create_relation_records(
     return relations
 
 
+@router.get("/captcha")
+async def captcha(db: AsyncIOMotorDatabase = Depends(get_db)):
+    a = secrets.randbelow(8) + 2
+    b = secrets.randbelow(8) + 2
+    op = secrets.choice(["+", "-"])
+    answer = a + b if op == "+" else a - b
+    token = secrets.token_urlsafe(16)
+    now = datetime.now(timezone.utc)
+    await db.captcha_records.insert_one({
+        "token": token,
+        "answer": int(answer),
+        "created_at": now,
+        "expires_at": now + timedelta(minutes=5),
+        "used": False,
+    })
+    return {"token": token, "question": f"{a} {op} {b} = ?"}
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(
     payload: LoginRequest,
@@ -229,6 +250,25 @@ async def register(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": "register_disabled", "message": "Staff registration is currently closed."},
         )
+    captcha_doc = await db.system_settings.find_one({"key": "staff_register_captcha_enabled"})
+    if captcha_doc is not None and captcha_doc.get("value") is True:
+        captcha_token = (payload.captcha_token or "").strip()
+        captcha_answer = (payload.captcha_answer or "").strip()
+        if not captcha_token or not captcha_answer:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=CAPTCHA_INVALID_DETAIL)
+        now = datetime.now(timezone.utc)
+        record = await db.captcha_records.find_one_and_update(
+            {"token": captcha_token, "used": False, "expires_at": {"$gt": now}},
+            {"$set": {"used": True}},
+            return_document=ReturnDocument.BEFORE,
+        )
+        if not record:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=CAPTCHA_INVALID_DETAIL)
+        try:
+            if int(captcha_answer) != record["answer"]:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=CAPTCHA_INVALID_DETAIL)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=CAPTCHA_INVALID_DETAIL) from exc
     phone = validate_phone(payload.phone)
     await ensure_unique_staff_fields(db, payload.username, phone)
     parent = None

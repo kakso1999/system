@@ -1,13 +1,23 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { BadgeCheck, User, Phone, Lock, Ticket, UserPlus } from "lucide-react";
+import { BadgeCheck, User, Phone, Lock, Ticket, UserPlus, RefreshCw } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import { getPublicSettings } from "@/lib/public-settings";
 
 type StaffRegisterSettings = {
   staff_register_enabled?: boolean;
+};
+
+type StaffRegisterPublicSettings = StaffRegisterSettings & {
+  customer_service_whatsapp?: string;
+  staff_register_captcha_enabled?: boolean;
+};
+
+type CaptchaResponse = {
+  token: string;
+  question: string;
 };
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -20,6 +30,12 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function isCaptchaInvalid(error: unknown) {
+  const axiosErr = error as { response?: { status?: number; data?: { detail?: string | { code?: string } } } };
+  const detail = axiosErr.response?.data?.detail;
+  return axiosErr.response?.status === 400 && typeof detail === "object" && detail?.code === "captcha_invalid";
+}
+
 function StaffRegisterForm() {
   const searchParams = useSearchParams();
   const inviteFromUrl = searchParams.get("invite") || "";
@@ -27,11 +43,18 @@ function StaffRegisterForm() {
   const [phone, setPhone] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const [staffRegisterEnabled, setStaffRegisterEnabled] = useState<boolean | null>(null);
+  const [staffRegisterCaptchaEnabled, setStaffRegisterCaptchaEnabled] = useState(false);
+  const [customerServiceWhatsapp, setCustomerServiceWhatsapp] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaQuestion, setCaptchaQuestion] = useState("");
+  const [captchaAnswer, setCaptchaAnswer] = useState("");
+  const [captchaLoading, setCaptchaLoading] = useState(false);
 
   useEffect(() => {
     if (inviteFromUrl) {
@@ -39,17 +62,46 @@ function StaffRegisterForm() {
     }
   }, [inviteFromUrl]);
 
+  const refreshCaptcha = async () => {
+    setCaptchaLoading(true);
+    setCaptchaToken("");
+    setCaptchaQuestion("");
+    setCaptchaAnswer("");
+    try {
+      const { data } = await api.get<CaptchaResponse>("/api/auth/staff/captcha");
+      setCaptchaToken(data.token);
+      setCaptchaQuestion(data.question);
+    } catch {
+      setCaptchaQuestion("Unable to load captcha");
+    } finally {
+      setCaptchaLoading(false);
+    }
+  };
+
   useEffect(() => {
     let active = true;
     getPublicSettings().then((settings) => {
       if (active) {
-        setStaffRegisterEnabled((settings as StaffRegisterSettings).staff_register_enabled ?? true);
+        const publicSettings = settings as StaffRegisterPublicSettings;
+        setStaffRegisterEnabled(publicSettings.staff_register_enabled ?? true);
+        setStaffRegisterCaptchaEnabled(publicSettings.staff_register_captcha_enabled === true);
+        setCustomerServiceWhatsapp(publicSettings.customer_service_whatsapp || "");
       }
     });
     return () => {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!staffRegisterCaptchaEnabled) {
+      setCaptchaToken("");
+      setCaptchaQuestion("");
+      setCaptchaAnswer("");
+      return;
+    }
+    void refreshCaptcha();
+  }, [staffRegisterCaptchaEnabled]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,6 +111,10 @@ function StaffRegisterForm() {
     }
     setError("");
     setSuccess("");
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
     setLoading(true);
     try {
       await api.post("/api/auth/staff/register", {
@@ -67,14 +123,26 @@ function StaffRegisterForm() {
         username,
         password,
         invite_code: inviteCode || null,
+        captcha_token: captchaToken,
+        captcha_answer: captchaAnswer,
       });
       setSuccess("Registration submitted! Please wait for admin approval.");
       setName("");
       setPhone("");
       setUsername("");
       setPassword("");
+      setConfirmPassword("");
+      setCaptchaAnswer("");
+      if (staffRegisterCaptchaEnabled) {
+        void refreshCaptcha();
+      }
     } catch (err: unknown) {
-      setError(getErrorMessage(err, "Registration failed"));
+      if (isCaptchaInvalid(err)) {
+        setError("Captcha incorrect, try again");
+        void refreshCaptcha();
+      } else {
+        setError(getErrorMessage(err, "Registration failed"));
+      }
     } finally {
       setLoading(false);
     }
@@ -161,6 +229,18 @@ function StaffRegisterForm() {
               </div>
 
               <div className="space-y-2">
+                <label className="text-sm font-bold text-on-surface-variant px-1" htmlFor="confirmPassword">Confirm Password</label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-outline group-focus-within:text-primary transition-colors">
+                    <Lock className="w-5 h-5" />
+                  </div>
+                  <input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm your password"
+                    className="w-full bg-surface-container-low border-none rounded-xl py-4 pl-12 pr-4 text-on-surface placeholder:text-outline/60 focus:ring-2 focus:ring-primary/40 transition-all" required />
+                </div>
+              </div>
+
+              <div className="space-y-2">
                 <label className="text-sm font-bold text-on-surface-variant px-1" htmlFor="inviteCode">Invite Code</label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-outline group-focus-within:text-primary transition-colors">
@@ -175,7 +255,35 @@ function StaffRegisterForm() {
                 )}
               </div>
 
-              <button type="submit" disabled={loading}
+              {staffRegisterCaptchaEnabled && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3 px-1">
+                    <label className="text-sm font-bold text-on-surface-variant" htmlFor="captchaAnswer">
+                      {captchaQuestion || "Loading captcha..."}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void refreshCaptcha()}
+                      disabled={captchaLoading}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-surface-container-low text-primary transition-all hover:bg-surface-container active:scale-[0.98] disabled:opacity-60"
+                      aria-label="Refresh captcha"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${captchaLoading ? "animate-spin" : ""}`} />
+                    </button>
+                  </div>
+                  <input
+                    id="captchaAnswer"
+                    type="number"
+                    value={captchaAnswer}
+                    onChange={(e) => setCaptchaAnswer(e.target.value)}
+                    placeholder="Enter the answer"
+                    className="w-full bg-surface-container-low border-none rounded-xl py-4 px-4 text-on-surface placeholder:text-outline/60 focus:ring-2 focus:ring-primary/40 transition-all"
+                    required
+                  />
+                </div>
+              )}
+
+              <button type="submit" disabled={loading || captchaLoading || (staffRegisterCaptchaEnabled && !captchaToken)}
                 className="w-full bg-gradient-to-r from-primary to-primary-dim text-on-primary font-[var(--font-headline)] font-bold py-4 rounded-full shadow-lg shadow-primary/20 hover:shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-60">
                 <span>{loading ? "Submitting..." : "Register"}</span>
                 {!loading && <UserPlus className="w-5 h-5" />}
@@ -187,6 +295,18 @@ function StaffRegisterForm() {
             <a href="/staff-login" className="text-sm text-primary font-bold hover:underline">
               Back to Login
             </a>
+            {customerServiceWhatsapp.trim() && (
+              <div className="mt-3">
+                <a
+                  href={customerServiceWhatsapp}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm text-primary font-bold hover:underline"
+                >
+                  Need help? Contact us on WhatsApp
+                </a>
+              </div>
+            )}
           </div>
         </div>
       </div>
