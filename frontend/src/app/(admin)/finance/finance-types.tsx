@@ -1,6 +1,6 @@
 import type { CommissionLog, Staff, WithdrawalRequest } from "@/types";
 
-export type TabKey = "staff" | "commissions" | "withdrawals";
+export type TabKey = "staff" | "commissions" | "withdrawals" | "combined";
 
 export interface FinanceOverview {
   total_commission: number;

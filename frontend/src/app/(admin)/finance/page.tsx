@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/api";
 import type { PageResponse } from "@/types";
+import CombinedSettleTab from "./combined-settle-tab";
 import CommissionRecordsSection from "./commission-records-section";
 import type { AdminCommissionRecord, FinanceOverview, StaffPerformance, TabKey } from "./finance-types";
 import { toPoints } from "./finance-types";
@@ -208,6 +209,12 @@ export default function FinancePage() {
           佣金记录
         </button>
         <button
+          onClick={() => setActiveTab("combined")}
+          className={`rounded-full px-4 py-2 text-sm font-bold ${activeTab === "combined" ? "bg-primary text-on-primary" : "text-on-surface-variant"}`}
+        >
+          合并结算
+        </button>
+        <button
           onClick={() => setActiveTab("withdrawals")}
           className={`rounded-full px-4 py-2 text-sm font-bold ${activeTab === "withdrawals" ? "bg-primary text-on-primary" : "text-on-surface-variant"}`}
         >
@@ -241,6 +248,10 @@ export default function FinancePage() {
           onApprove={approveCommission}
           onReject={(record) => { setRejectModal(record); setRejectReason(""); }}
         />
+      )}
+
+      {activeTab === "combined" && (
+        <CombinedSettleTab />
       )}
 
       {activeTab === "withdrawals" && (

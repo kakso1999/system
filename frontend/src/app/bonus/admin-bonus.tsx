@@ -62,9 +62,11 @@ export default function AdminBonusPage() {
   const [form, setForm] = useState<BonusRuleForm>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [updatingId, setUpdatingId] = useState("");
+  const [settlingBatch, setSettlingBatch] = useState(false);
 
   const staffMap = useMemo(() => buildStaffMap(staff), [staff]);
   const overrides = useMemo(() => rules.filter((rule) => rule.staff_id !== null), [rules]);
+  const claimableRecords = useMemo(() => records.filter((record) => record.status === "claimed"), [records]);
   const totalPages = Math.max(1, Math.ceil(recordsTotal / pageSize));
 
   const loadRules = useCallback(async () => {
@@ -170,6 +172,25 @@ export default function AdminBonusPage() {
     setPage(1);
   };
 
+  const settleBatch = async () => {
+    const recordIds = claimableRecords.map((record) => record.id);
+    if (recordIds.length === 0) {
+      alert("当前列表没有可结算的记录");
+      return;
+    }
+    if (!window.confirm(`确认批量结算当前列表中的 ${recordIds.length} 条记录？`)) return;
+    setSettlingBatch(true);
+    try {
+      await api.post("/api/admin/bonus/settle-batch", { record_ids: recordIds });
+      await loadRecords();
+      alert(`已结算 ${recordIds.length} 条`);
+    } catch (errorResponse) {
+      alert(getErrorDetail(errorResponse) || "批量结算失败");
+    } finally {
+      setSettlingBatch(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -207,8 +228,11 @@ export default function AdminBonusPage() {
           loading={loadingRecords}
           page={page}
           totalPages={totalPages}
+          batchSettleCount={claimableRecords.length}
+          settlingBatch={settlingBatch}
           onFiltersChange={updateFilters}
           onResetFilters={() => updateFilters(emptyFilters)}
+          onBatchSettle={settleBatch}
           onPrev={() => setPage((current) => Math.max(1, current - 1))}
           onNext={() => setPage((current) => Math.min(totalPages, current + 1))}
         />

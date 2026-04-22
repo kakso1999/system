@@ -6,6 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_db
 from app.dependencies import get_current_admin
 from app.schemas.common import MessageResponse, PageResponse
+from app.services.commission import generate_commission_no
 from app.services.withdrawals import (
     fetch_withdrawal_page,
     get_withdrawal_or_404,
@@ -218,6 +219,76 @@ async def manual_settle(
         remark=remark,
     )
     return MessageResponse(message=f"Settled {len(settle_claim_ids)} claim records")
+
+
+@router.post("/combined-settle", response_model=MessageResponse)
+async def combined_settle(
+    payload: dict,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> MessageResponse:
+    """Settle direct commissions and, optionally, claimed bonus records for one staff."""
+    staff_id = payload.get("staff_id")
+    if not staff_id or not ObjectId.is_valid(staff_id):
+        raise HTTPException(status_code=400, detail="staff_id required")
+    sid = ObjectId(staff_id)
+    cid = None
+    if payload.get("campaign_id"):
+        if not ObjectId.is_valid(payload["campaign_id"]):
+            raise HTTPException(status_code=400, detail="Invalid campaign_id")
+        cid = ObjectId(payload["campaign_id"])
+    include_bonus = bool(payload.get("include_bonus", True))
+
+    now = datetime.now(timezone.utc)
+    commission_filter = {"beneficiary_staff_id": sid, "status": "approved", "type": "direct"}
+    if cid is not None:
+        commission_filter["campaign_id"] = cid
+    comm_result = await db.commission_logs.update_many(
+        commission_filter,
+        {"$set": {"status": "paid", "paid_at": now}},
+    )
+
+    bonus_count = 0
+    if include_bonus:
+        bonus_filter = {"staff_id": sid, "status": "claimed"}
+        if cid is not None:
+            bonus_filter["campaign_id"] = cid
+        async for rec in db.bonus_claim_records.find(bonus_filter):
+            amount_cents = int(rec.get("amount_cents") or to_cents(rec.get("amount") or 0))
+            flip = await db.bonus_claim_records.find_one_and_update(
+                {"_id": rec["_id"], "status": "claimed"},
+                {"$set": {"status": "settled", "settled_at": now}},
+            )
+            if flip is None:
+                continue
+            await db.commission_logs.insert_one({
+                "commission_no": generate_commission_no(),
+                "claim_id": None,
+                "type": "bonus",
+                "bonus_record_id": rec["_id"],
+                "beneficiary_staff_id": sid,
+                "source_staff_id": sid,
+                "level": 0,
+                "amount_cents": amount_cents,
+                "amount": from_cents(amount_cents),
+                "status": "paid",
+                "created_at": now,
+                "paid_at": now,
+                "rate": 0.0,
+                "vip_level_at_time": 0,
+                "currency": "PHP",
+                "campaign_id": rec.get("campaign_id"),
+            })
+            await db.staff_users.update_one(
+                {"_id": sid},
+                {"$inc": {
+                    "stats.total_commission": from_cents(amount_cents),
+                    "stats.total_commission_cents": amount_cents,
+                }},
+            )
+            bonus_count += 1
+    return MessageResponse(
+        message=f"Settled {comm_result.modified_count} commissions and {bonus_count} bonus records"
+    )
 
 
 @router.get("/settlement-records", response_model=PageResponse)

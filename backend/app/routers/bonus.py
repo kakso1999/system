@@ -30,6 +30,7 @@ from app.services.bonus import (
     insert_bonus_claim_record,
     sorted_tiers,
 )
+from app.services.commission import generate_commission_no
 from app.utils.helpers import to_str_id
 from app.utils.money import from_cents, read_cents, to_cents
 
@@ -253,6 +254,61 @@ async def list_bonus_records(
     total = await db.bonus_claim_records.count_documents(query)
     items = [BonusClaimRecordResponse.model_validate(serialize_bonus_record(doc)) for doc in docs]
     return BonusClaimRecordListResponse(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.post("/settle-batch", response_model=SuccessResponse)
+async def settle_bonus_batch(
+    payload: dict,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> SuccessResponse:
+    """Mark claimed bonus records as settled and write matching paid bonus commission logs."""
+    ids = payload.get("record_ids") or []
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="record_ids required")
+    oids: list[ObjectId] = []
+    for rid in ids:
+        if not ObjectId.is_valid(rid):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid record_id {rid}")
+        oids.append(ObjectId(rid))
+
+    now = datetime.now(timezone.utc)
+    settled = 0
+    async for rec in db.bonus_claim_records.find({"_id": {"$in": oids}, "status": "claimed"}):
+        amount_cents = int(rec.get("amount_cents") or to_cents(rec.get("amount") or 0))
+        result = await db.bonus_claim_records.find_one_and_update(
+            {"_id": rec["_id"], "status": "claimed"},
+            {"$set": {"status": "settled", "settled_at": now}},
+            return_document=ReturnDocument.AFTER,
+        )
+        if result is None:
+            continue
+        await db.commission_logs.insert_one({
+            "commission_no": generate_commission_no(),
+            "claim_id": None,
+            "type": "bonus",
+            "bonus_record_id": rec["_id"],
+            "beneficiary_staff_id": rec["staff_id"],
+            "source_staff_id": rec["staff_id"],
+            "level": 0,
+            "amount_cents": amount_cents,
+            "amount": from_cents(amount_cents),
+            "status": "paid",
+            "created_at": now,
+            "paid_at": now,
+            "rate": 0.0,
+            "vip_level_at_time": 0,
+            "currency": "PHP",
+            "campaign_id": rec.get("campaign_id"),
+        })
+        await db.staff_users.update_one(
+            {"_id": rec["staff_id"]},
+            {"$inc": {
+                "stats.total_commission": from_cents(amount_cents),
+                "stats.total_commission_cents": amount_cents,
+            }},
+        )
+        settled += 1
+    return SuccessResponse(success=bool(settled))
 
 
 async def promoter_bonus_progress_stub():
