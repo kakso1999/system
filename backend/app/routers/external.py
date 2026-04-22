@@ -1,5 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
+from bson import ObjectId
 from fastapi import APIRouter, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel, ConfigDict
@@ -66,6 +67,38 @@ async def redeem_reward_code(
             "success": False,
             "message": f"Reward code status is '{existing.get('status')}', cannot redeem",
         }
+    # D5: per-staff daily redeem cap — auto-freeze on breach.
+    staff_id = rc.get("staff_id")
+    if isinstance(staff_id, ObjectId):
+        staff_doc = await db.staff_users.find_one(
+            {"_id": staff_id},
+            {"daily_redeem_limit": 1, "risk_frozen": 1},
+        )
+        if staff_doc:
+            cap = int(staff_doc.get("daily_redeem_limit") or 0)
+            if cap > 0:
+                window_start = now - timedelta(hours=24)
+                redeemed_count = await db.reward_codes.count_documents({
+                    "staff_id": staff_id,
+                    "status": "redeemed",
+                    "redeemed_at": {"$gte": window_start},
+                    "_id": {"$ne": rc["_id"]},
+                })
+                if redeemed_count + 1 > cap:
+                    await db.staff_users.update_one(
+                        {"_id": staff_id},
+                        {"$set": {"risk_frozen": True, "updated_at": now, "risk_frozen_reason": "daily_redeem_cap"}},
+                    )
+                    await db.promo_live_tokens.update_many(
+                        {"staff_id": staff_id, "status": "active"},
+                        {"$set": {"status": "expired", "expired_at": now, "expired_reason": "daily_redeem_cap"}},
+                    )
+                    # Roll back the redemption to avoid exceeding cap.
+                    await db.reward_codes.update_one(
+                        {"_id": rc["_id"]},
+                        {"$set": {"status": "assigned", "updated_at": now}, "$unset": {"redeemed_at": ""}},
+                    )
+                    return {"success": False, "message": "Daily redeem cap reached; promoter auto-frozen."}
     await db.claims.update_one(
         {"reward_code_id": rc["_id"], "settlement_status": "pending_redeem"},
         {"$set": {"settlement_status": "unpaid"}},

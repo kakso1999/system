@@ -78,7 +78,15 @@ async def calculate_commissions(db, staff_doc, claim_id, campaign_id):
         3: "commission_vip3",
         4: "commission_svip",
     }.get(vip_level, "commission_svip")
-    level1_rate = float(await get_setting(db, level1_key, 1.0))
+    # A3: per-valid-claim settlement price overrides the vip-0 default when present.
+    if vip_level == 0:
+        override = await get_setting(db, "commission_per_valid_claim", None)
+        if override is not None:
+            level1_rate = float(override)
+        else:
+            level1_rate = float(await get_setting(db, level1_key, 1.0))
+    else:
+        level1_rate = float(await get_setting(db, level1_key, 1.0))
     level1_cents = to_cents(level1_rate)
     await create_commission_log(
         db,

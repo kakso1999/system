@@ -118,6 +118,7 @@ async def seed_settings():
         {"key": "must_start_work_before_qr", "value": False, "group": "live_qr", "description": "If True, promoter must toggle work_status='promoting' before generating live QR/PIN"},
         {"key": "allow_static_link", "value": True, "group": "live_qr", "description": "If False, the /welcome/{code} static link is rejected and only signed-link flow is allowed"},
         {"key": "ip_rate_limit_enabled", "value": True, "group": "risk_control", "description": "Master switch for IP-based OTP/claim rate limits (ip_daily_limit, ip_window_min)"},
+        {"key": "commission_per_valid_claim", "value": 1.0, "group": "commission", "description": "A3: settlement unit price per valid claim (PHP). Used as level-1 base when set; falls back to commission_level1_default."},
     ]
     for item in defaults:
         await db.system_settings.update_one(
@@ -178,27 +179,33 @@ app.add_middleware(
 from app.routers import admin_auth, staff_auth, campaigns, wheel, reward_codes, admins
 from app.routers import staff, claims, user_flow, risk_control, settings as settings_router
 from app.routers import promoter, finance, dashboard, external, bonus, registrations, sponsors, public_settings, qr
+from app.utils.csrf import require_csrf
+from fastapi import Depends
+
+# Wave v26-D M3: enforce CSRF at router level for all admin mutation endpoints.
+# require_csrf is a no-op on GET/HEAD/OPTIONS and for Bearer-only (cookie-less) clients.
+_csrf_guard = [Depends(require_csrf)]
 
 app.include_router(admin_auth.router, prefix="/api/auth/admin", tags=["Admin Auth"])
 app.include_router(staff_auth.router, prefix="/api/auth/staff", tags=["Staff Auth"])
-app.include_router(admins.router, prefix="/api/admin/admins", tags=["Admin Management"])
-app.include_router(campaigns.router, prefix="/api/admin/campaigns", tags=["Campaigns"])
-app.include_router(wheel.router, prefix="/api/admin/wheel-items", tags=["Wheel Items"])
-app.include_router(reward_codes.router, prefix="/api/admin/reward-codes", tags=["Reward Codes"])
-app.include_router(staff.router, prefix="/api/admin/staff", tags=["Staff Management"])
-app.include_router(registrations.router, prefix="/api/admin/registrations", tags=["Registrations"])
-app.include_router(claims.router, prefix="/api/admin/claims", tags=["Claims Records"])
-app.include_router(risk_control.router, prefix="/api/admin/risk-control", tags=["Risk Control"])
-app.include_router(settings_router.router, prefix="/api/admin/settings", tags=["System Settings"])
-app.include_router(finance.router, prefix="/api/admin/finance", tags=["Finance"])
-app.include_router(dashboard.router, prefix="/api/admin/dashboard", tags=["Dashboard"])
-app.include_router(bonus.router, prefix="/api/admin/bonus", tags=["Bonus"])
+app.include_router(admins.router, prefix="/api/admin/admins", tags=["Admin Management"], dependencies=_csrf_guard)
+app.include_router(campaigns.router, prefix="/api/admin/campaigns", tags=["Campaigns"], dependencies=_csrf_guard)
+app.include_router(wheel.router, prefix="/api/admin/wheel-items", tags=["Wheel Items"], dependencies=_csrf_guard)
+app.include_router(reward_codes.router, prefix="/api/admin/reward-codes", tags=["Reward Codes"], dependencies=_csrf_guard)
+app.include_router(staff.router, prefix="/api/admin/staff", tags=["Staff Management"], dependencies=_csrf_guard)
+app.include_router(registrations.router, prefix="/api/admin/registrations", tags=["Registrations"], dependencies=_csrf_guard)
+app.include_router(claims.router, prefix="/api/admin/claims", tags=["Claims Records"], dependencies=_csrf_guard)
+app.include_router(risk_control.router, prefix="/api/admin/risk-control", tags=["Risk Control"], dependencies=_csrf_guard)
+app.include_router(settings_router.router, prefix="/api/admin/settings", tags=["System Settings"], dependencies=_csrf_guard)
+app.include_router(finance.router, prefix="/api/admin/finance", tags=["Finance"], dependencies=_csrf_guard)
+app.include_router(dashboard.router, prefix="/api/admin/dashboard", tags=["Dashboard"], dependencies=_csrf_guard)
+app.include_router(bonus.router, prefix="/api/admin/bonus", tags=["Bonus"], dependencies=_csrf_guard)
 app.include_router(bonus.promoter_router, prefix="/api/promoter/bonus", tags=["Promoter Bonus"])
 app.include_router(user_flow.router, prefix="/api/claim", tags=["User Claim Flow"])
 app.include_router(promoter.router, prefix="/api/promoter", tags=["Promoter"])
 app.include_router(external.router, prefix="/api/external", tags=["External"])
 app.include_router(external.alias_router, prefix="/api/redeem", tags=["Redeem Alias"])
-app.include_router(sponsors.router, prefix="/api/admin/sponsors", tags=["Sponsors"])
+app.include_router(sponsors.router, prefix="/api/admin/sponsors", tags=["Sponsors"], dependencies=_csrf_guard)
 app.include_router(sponsors.public_router, prefix="/api/sponsors", tags=["Sponsors Public"])
 app.include_router(public_settings.router, prefix="/api/public", tags=["Public Settings"])
 app.include_router(qr.router, prefix="/api/public", tags=["Public QR"])
