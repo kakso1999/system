@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Shield, AlertTriangle } from "lucide-react";
 import api from "@/lib/api";
+import { getSettingHelp, getSettingLabel } from "@/lib/settings-labels";
 
 interface RiskSetting {
   key: string;
@@ -60,13 +61,6 @@ export default function RiskControlPage() {
 
   const logTotalPages = Math.ceil(logTotal / 20);
 
-  const settingLabels: Record<string, string> = {
-    risk_phone_unique: "手机号唯一限制",
-    risk_ip_unique: "IP 地址唯一限制",
-    risk_device_unique: "设备指纹唯一限制",
-    sms_verification: "短信验证码验证",
-  };
-
   if (loading) {
     return <div className="flex items-center justify-center h-64 text-on-surface-variant">加载中...</div>;
   }
@@ -88,8 +82,8 @@ export default function RiskControlPage() {
           {settings.map((s) => (
             <div key={s.key} className="flex items-center justify-between py-3 px-4 rounded-xl hover:bg-surface-container-low/50 transition-colors">
               <div>
-                <p className="font-semibold text-sm">{settingLabels[s.key] || s.key}</p>
-                <p className="text-xs text-on-surface-variant mt-0.5">{s.description}</p>
+                <p className="font-semibold text-sm">{getSettingLabel(s.key)}</p>
+                <p className="text-xs text-on-surface-variant mt-0.5">{getSettingHelp(s.key, s.description)}</p>
               </div>
               <button
                 onClick={() => toggleSetting(s.key, s.value)}
