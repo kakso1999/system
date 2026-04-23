@@ -378,11 +378,29 @@ async def _increment_qr_version(db: AsyncIOMotorDatabase, staff_id: ObjectId) ->
     return int(updated.get("qr_version", 0))
 
 
+def _get_staff_inactive_reason(staff: dict) -> str | None:
+    if staff.get("status", "active") != "active":
+        return "status_disabled"
+    if staff.get("work_status", "stopped") != "promoting":
+        return "work_not_promoting"
+    if bool(staff.get("promotion_paused", False)):
+        return "promotion_paused"
+    if bool(staff.get("risk_frozen", False)):
+        return "risk_frozen"
+    return None
+
+
 @router.post("/live-qr/generate")
 async def live_qr_generate(
     current_staff: dict = Depends(get_current_staff),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
+    inactive_reason = _get_staff_inactive_reason(current_staff)
+    if inactive_reason:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "staff_inactive", "reason": inactive_reason},
+        )
     if not current_staff.get("campaign_id"):
         raise HTTPException(status_code=400, detail="no_active_campaign")
     now = datetime.now(timezone.utc)
@@ -435,7 +453,7 @@ async def live_qr_status(
         sort=[("created_at", -1)],
     )
     if not token:
-        return {"status": "none"}
+        return {"status": "none", "needs_rotate": True}
     now = datetime.now(timezone.utc)
     exp = token.get("expires_at")
     if exp and exp.tzinfo is None:
@@ -444,6 +462,7 @@ async def live_qr_status(
     if status == "active" and exp and exp <= now:
         await db.promo_live_tokens.update_one({"_id": token["_id"]}, {"$set": {"status": "expired"}})
         status = "expired"
+    needs_rotate = status in ("locked", "expired", "rotated", "consumed")
     invite_code = current_staff.get("invite_code", "")
     return {
         "live_token_id": str(token["_id"]),
@@ -452,6 +471,7 @@ async def live_qr_status(
         "expires_at": exp.isoformat() if exp else None,
         "qr_version": token.get("qr_version", 0),
         "status": status,
+        "needs_rotate": needs_rotate,
     }
 
 
