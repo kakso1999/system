@@ -415,6 +415,43 @@ async def live_qr_generate(
         "pin": pin,
         "expires_at": expires_at.isoformat(),
         "qr_version": qr_version,
+        "status": "active",
+    }
+
+
+@router.get("/live-qr")
+async def live_qr_status(
+    current_staff: dict = Depends(get_current_staff),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    """Read-only poll of the promoter's current live QR token.
+
+    Returns the most recent token for the staff (any status). The frontend uses
+    this to detect when a user has consumed the token or it expired so it can
+    auto-rotate by calling POST /live-qr/generate.
+    """
+    token = await db.promo_live_tokens.find_one(
+        {"staff_id": current_staff["_id"]},
+        sort=[("created_at", -1)],
+    )
+    if not token:
+        return {"status": "none"}
+    now = datetime.now(timezone.utc)
+    exp = token.get("expires_at")
+    if exp and exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    status = token.get("status", "active")
+    if status == "active" and exp and exp <= now:
+        await db.promo_live_tokens.update_one({"_id": token["_id"]}, {"$set": {"status": "expired"}})
+        status = "expired"
+    invite_code = current_staff.get("invite_code", "")
+    return {
+        "live_token_id": str(token["_id"]),
+        "qr_data": f"/pin/{invite_code}?lt={token.get('token_signature','')}&v={token.get('qr_version',0)}",
+        "pin": token.get("pin", ""),
+        "expires_at": exp.isoformat() if exp else None,
+        "qr_version": token.get("qr_version", 0),
+        "status": status,
     }
 
 

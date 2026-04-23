@@ -161,7 +161,7 @@ async def change_password(
         )
     await db.admins.update_one(
         {"_id": current_admin["_id"]},
-        {"$set": {"password_hash": hash_password(payload.new_password)}},
+        {"$set": {"password_hash": hash_password(payload.new_password), "must_change_password": False}},
     )
     return MessageResponse(message="Password updated successfully")
 
