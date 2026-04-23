@@ -3,6 +3,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { Settings, Save } from "lucide-react";
 import api from "@/lib/api";
+import {
+  SETTING_GROUP_LABELS,
+  SETTING_LABELS,
+  getGroupLabel,
+  getSettingHelp,
+  getSettingLabel,
+  getSettingUnit,
+} from "@/lib/settings-labels";
 
 interface SystemSetting {
   key: string;
@@ -10,27 +18,6 @@ interface SystemSetting {
   group: string;
   description: string;
 }
-
-const groupLabels: Record<string, string> = {
-  risk_control: "风控设置",
-  commission: "佣金配置",
-  general: "通用设置",
-};
-
-const settingLabels: Record<string, string> = {
-  risk_phone_unique: "手机号唯一限制",
-  risk_ip_unique: "IP 唯一限制",
-  risk_device_unique: "设备指纹唯一",
-  sms_verification: "短信验证",
-  commission_level1_default: "一级佣金（默认）",
-  commission_level2: "二级佣金",
-  commission_level3: "三级佣金",
-  commission_vip1: "VIP1 一级佣金",
-  commission_vip2: "VIP2 一级佣金",
-  commission_vip3: "VIP3 一级佣金",
-  commission_svip: "超级VIP 一级佣金",
-  default_currency: "默认货币",
-};
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<SystemSetting[]>([]);
@@ -96,21 +83,26 @@ export default function SettingsPage() {
         <div key={group} className="bg-surface-container-lowest rounded-xl shadow-sm p-6">
           <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
             <Settings className="w-5 h-5 text-primary" />
-            {groupLabels[group] || group}
+            {SETTING_GROUP_LABELS[group] ?? getGroupLabel(group)}
           </h2>
           <div className="space-y-4">
             {items.map((s) => {
+              const meta = SETTING_LABELS[s.key];
               const original = String(s.value);
               const current = editValues[s.key] ?? original;
               const changed = current !== original;
+              const isBoolean = meta?.type === "bool" || typeof s.value === "boolean";
+              const label = meta?.label ?? getSettingLabel(s.key);
+              const help = meta?.help ?? getSettingHelp(s.key, s.description);
+              const unit = meta?.unit ?? getSettingUnit(s.key);
               return (
                 <div key={s.key} className="flex items-center gap-4 py-3 px-4 rounded-xl hover:bg-surface-container-low/50 transition-colors">
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm">{settingLabels[s.key] || s.key}</p>
-                    <p className="text-xs text-on-surface-variant mt-0.5">{s.description}</p>
+                    <p className="font-semibold text-sm">{label}</p>
+                    <p className="text-xs text-on-surface-variant mt-0.5">{help}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {typeof s.value === "boolean" ? (
+                    {isBoolean ? (
                       <button
                         onClick={() => {
                           setEditValues({ ...editValues, [s.key]: current === "true" ? "false" : "true" });
@@ -120,12 +112,15 @@ export default function SettingsPage() {
                         <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-transform ${current === "true" ? "left-6" : "left-1"}`} />
                       </button>
                     ) : (
-                      <input
-                        type="text"
-                        value={current}
-                        onChange={(e) => setEditValues({ ...editValues, [s.key]: e.target.value })}
-                        className="w-32 bg-surface-container-low border-none rounded-lg py-2 px-3 text-sm text-right focus:ring-2 focus:ring-primary/40"
-                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={current}
+                          onChange={(e) => setEditValues({ ...editValues, [s.key]: e.target.value })}
+                          className="w-32 bg-surface-container-low border-none rounded-lg py-2 px-3 text-sm text-right focus:ring-2 focus:ring-primary/40"
+                        />
+                        {unit ? <span className="text-xs text-gray-500">{unit}</span> : null}
+                      </div>
                     )}
                     {changed && (
                       <button
