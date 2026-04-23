@@ -13,6 +13,8 @@ interface LiveQrState {
   expires_at: string;
   qr_version: number;
   status?: string;
+  needs_rotate?: boolean;
+  currentTokenId: string;
   loading: boolean;
   error: string;
 }
@@ -23,6 +25,22 @@ interface LiveQrPayload {
   expires_at?: string;
   qr_version?: number;
   status?: string;
+  needs_rotate?: boolean;
+  live_token_id?: string;
+}
+
+interface ApiErrorDetail {
+  code?: string;
+  reason?: string;
+}
+
+interface ApiErrorShape {
+  response?: {
+    status?: number;
+    data?: {
+      detail?: string | ApiErrorDetail;
+    };
+  };
 }
 
 const initialState: LiveQrState = {
@@ -31,6 +49,8 @@ const initialState: LiveQrState = {
   expires_at: "",
   qr_version: 0,
   status: "",
+  needs_rotate: false,
+  currentTokenId: "",
   loading: true,
   error: "",
 };
@@ -40,15 +60,45 @@ function formatTime(seconds: number) {
   return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
 }
 
-function isTooManyRefresh(error: unknown) {
-  const axiosErr = error as { response?: { status?: number; data?: { detail?: string | { code?: string } } } };
-  const detail = axiosErr.response?.data?.detail;
-  const code = typeof detail === "object" ? detail.code : detail;
-  return axiosErr.response?.status === 429 && code === "too_many_refresh";
+function getResponseStatus(error: unknown) {
+  return (error as ApiErrorShape).response?.status;
 }
 
-function getResponseStatus(error: unknown) {
-  return (error as { response?: { status?: number } }).response?.status;
+function getErrorDetail(error: unknown) {
+  return (error as ApiErrorShape).response?.data?.detail;
+}
+
+function getErrorCode(error: unknown) {
+  const detail = getErrorDetail(error);
+  return typeof detail === "string" ? detail : detail?.code;
+}
+
+function isTooManyRefresh(error: unknown) {
+  return getResponseStatus(error) === 429 && getErrorCode(error) === "too_many_refresh";
+}
+
+function shouldDropStalePoll(prev: LiveQrState, payload: LiveQrPayload) {
+  const nextTokenId = payload.live_token_id ?? prev.currentTokenId;
+  const nextVersion = payload.qr_version ?? prev.qr_version;
+  return nextTokenId !== prev.currentTokenId && nextVersion <= prev.qr_version;
+}
+
+function mergeLiveQrState(prev: LiveQrState, payload: LiveQrPayload, source: "generate" | "poll"): LiveQrState {
+  const fallbackStatus = prev.status || "active";
+  const nextStatus = source === "generate" ? payload.status ?? "active" : payload.status ?? fallbackStatus;
+  const nextNeedsRotate = source === "generate" ? payload.needs_rotate ?? false : payload.needs_rotate ?? prev.needs_rotate ?? false;
+  return {
+    ...prev,
+    qr_data: payload.qr_data ?? prev.qr_data,
+    pin: payload.pin ?? prev.pin,
+    expires_at: payload.expires_at ?? prev.expires_at,
+    qr_version: payload.qr_version ?? prev.qr_version,
+    status: nextStatus,
+    needs_rotate: nextNeedsRotate,
+    currentTokenId: payload.live_token_id ?? prev.currentTokenId,
+    loading: false,
+    error: "",
+  };
 }
 
 function QrDisplay({ qrUrl, sizeClass }: { qrUrl: string; sizeClass: string }) {
@@ -198,6 +248,7 @@ function WorkstationCard({
   state,
   qrUrl,
   seconds,
+  banner,
   note,
   onCopy,
   onRefresh,
@@ -206,6 +257,7 @@ function WorkstationCard({
   state: LiveQrState;
   qrUrl: string;
   seconds: number;
+  banner: string;
   note: string;
   onCopy: () => void;
   onRefresh: () => void;
@@ -213,6 +265,7 @@ function WorkstationCard({
 }) {
   return (
     <div className="bg-surface-container-lowest rounded-2xl p-6 shadow-sm text-center space-y-6">
+      {banner && <div className="rounded-xl border border-primary/15 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary">{banner}</div>}
       <InlineNote note={note} error={state.error} />
       <div>
         <QrDisplay qrUrl={qrUrl} sizeClass="h-56 w-56" />
@@ -233,78 +286,64 @@ export default function QRCodePage() {
   const [state, setState] = useState<LiveQrState>(initialState);
   const [origin, setOrigin] = useState("");
   const [secondsRemaining, setSecondsRemaining] = useState(0);
+  const [pausedBanner, setPausedBanner] = useState("");
   const [note, setNote] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
   const lastGenerateAt = useRef(0);
+  const lastAutoRotateAt = useRef(0);
+  const isGeneratingRef = useRef(false);
+  const inactiveCooldownUntil = useRef(0);
   const statusPollingAvailable = useRef(true);
 
   const qrUrl = state.qr_data ? `${origin}${state.qr_data}` : "";
 
-  useEffect(() => {
-    setOrigin(window.location.origin);
-    void generateLiveQr();
-  }, []);
+  const hasInactiveCooldown = () => Date.now() < inactiveCooldownUntil.current;
 
-  useEffect(() => {
-    if (!state.expires_at) return;
-    const updateCountdown = () => {
-      const next = Math.max(0, Math.ceil((new Date(state.expires_at).getTime() - Date.now()) / 1000));
-      setSecondsRemaining(next);
-      if (next <= 0) void generateLiveQr();
-    };
-    updateCountdown();
-    const timer = setInterval(updateCountdown, 1000);
-    return () => clearInterval(timer);
-  }, [state.expires_at]);
-
-  useEffect(() => {
-    if (!state.qr_data || !statusPollingAvailable.current) return;
-    const timer = setInterval(() => { void refreshLiveQr(); }, 3000);
-    return () => clearInterval(timer);
-  }, [state.qr_data]);
-
-  useEffect(() => {
-    if (state.status !== "consumed") return;
-    void generateLiveQr(true);
-  }, [state.status]);
-
-  const applyLiveQrPayload = (payload: LiveQrPayload) => {
-    setState((prev) => ({
-      ...prev,
-      qr_data: payload.qr_data ?? prev.qr_data,
-      pin: payload.pin ?? prev.pin,
-      expires_at: payload.expires_at ?? prev.expires_at,
-      qr_version: payload.qr_version ?? prev.qr_version,
-      status: payload.status ?? "active",
-      loading: false,
-      error: "",
-    }));
+  const applyLiveQrPayload = (payload: LiveQrPayload, source: "generate" | "poll") => {
+    setState((prev) => {
+      if (source === "poll" && shouldDropStalePoll(prev, payload)) {
+        console.debug("[live-qr] drop stale poll");
+        return prev;
+      }
+      return mergeLiveQrState(prev, payload, source);
+    });
   };
 
   const generateLiveQr = async (force = false) => {
     const now = Date.now();
+    if (isGeneratingRef.current || hasInactiveCooldown()) return;
     if (!force && now - lastGenerateAt.current < 1000) return;
+    isGeneratingRef.current = true;
     lastGenerateAt.current = now;
     setState((prev) => ({ ...prev, loading: true, error: "" }));
     setNote("");
     try {
       const res = await api.post<LiveQrPayload>("/api/promoter/live-qr/generate", {});
-      applyLiveQrPayload(res.data);
+      setPausedBanner("");
+      applyLiveQrPayload(res.data, "generate");
     } catch (err: unknown) {
+      if (getResponseStatus(err) === 400 && getErrorCode(err) === "staff_inactive") {
+        inactiveCooldownUntil.current = Date.now() + 30000;
+        setPausedBanner("Promotion paused / stopped — resume work to rotate QR.");
+        setState((prev) => ({ ...prev, loading: false, error: "" }));
+        return;
+      }
       if (isTooManyRefresh(err)) {
         setNote("Please wait a moment");
-      } else {
-        setState((prev) => ({ ...prev, error: "Unable to refresh live QR. Please try again." }));
+        setState((prev) => ({ ...prev, loading: false, error: "" }));
+        return;
       }
-      setState((prev) => ({ ...prev, loading: false }));
+      setState((prev) => ({ ...prev, loading: false, error: "Unable to refresh live QR. Please try again." }));
+    } finally {
+      isGeneratingRef.current = false;
     }
   };
 
   const refreshLiveQr = async () => {
-    if (!statusPollingAvailable.current) return;
+    if (!statusPollingAvailable.current || isGeneratingRef.current) return;
     try {
       const res = await api.get<LiveQrPayload>("/api/promoter/live-qr");
-      applyLiveQrPayload(res.data);
+      applyLiveQrPayload(res.data, "poll");
     } catch (err: unknown) {
       const status = getResponseStatus(err);
       if (status === 404 || status === 405) {
@@ -319,6 +358,47 @@ export default function QRCodePage() {
     setNote("Link copied.");
   };
 
+  useEffect(() => {
+    setOrigin(window.location.origin);
+    void generateLiveQr();
+  }, []);
+
+  useEffect(() => {
+    if (!state.expires_at) return;
+    const updateCountdown = () => {
+      const next = Math.max(0, Math.ceil((new Date(state.expires_at).getTime() - Date.now()) / 1000));
+      setSecondsRemaining(next);
+      if (next <= 0 && !hasInactiveCooldown()) void generateLiveQr();
+    };
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [state.expires_at]);
+
+  useEffect(() => {
+    if (!state.qr_data || !statusPollingAvailable.current) return;
+    const timer = setInterval(() => { void refreshLiveQr(); }, 3000);
+    return () => clearInterval(timer);
+  }, [state.qr_data]);
+
+  useEffect(() => {
+    if (!state.qr_data) return;
+    if (state.status === "active" && state.needs_rotate !== true) return;
+    if (isGeneratingRef.current || hasInactiveCooldown()) return;
+    const now = Date.now();
+    if (now - lastAutoRotateAt.current < 2000) return;
+    lastAutoRotateAt.current = now;
+    void generateLiveQr(true);
+  }, [state.needs_rotate, state.qr_data, state.status]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void refreshLiveQr();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
+
   return (
     <div className="min-h-screen bg-surface pb-24">
       {!fullscreen && <Header onBack={() => router.back()} />}
@@ -328,6 +408,7 @@ export default function QRCodePage() {
           state={state}
           qrUrl={qrUrl}
           seconds={secondsRemaining}
+          banner={pausedBanner}
           note={note}
           onCopy={() => void copyLink()}
           onRefresh={() => void generateLiveQr()}
