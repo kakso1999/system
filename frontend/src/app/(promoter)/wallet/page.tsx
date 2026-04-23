@@ -193,7 +193,7 @@ export default function WalletPage() {
             <article key={item.id} className="bg-surface-container-lowest rounded-xl p-5 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs text-on-surface-variant">{new Date(item.created_at).toLocaleString()}</p>
+                  <p className="text-xs text-on-surface-variant">{new Date(item.created_at).toLocaleString("en-US")}</p>
                   <p className="text-xl font-extrabold font-[var(--font-headline)] text-primary mt-1">{toPoints(Number(item.amount || 0))}</p>
                 </div>
                 <div className="flex items-center gap-2">

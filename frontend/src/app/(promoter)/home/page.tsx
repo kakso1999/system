@@ -72,7 +72,7 @@ function formatRelative(iso: string | null | undefined): string {
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
-  return new Date(time).toLocaleDateString();
+  return new Date(time).toLocaleDateString("en-US");
 }
 
 function getWorkStatus(status: unknown): WorkStatus {
@@ -202,7 +202,7 @@ function BonusSprintCard({ bonus, onOpen }: { bonus: BonusTodaySummary | null; o
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Daily Sprint</p>
-          <h3 className="text-2xl font-extrabold font-[var(--font-headline)] mt-1 text-primary">今日冲单奖励</h3>
+          <h3 className="text-2xl font-extrabold font-[var(--font-headline)] mt-1 text-primary">Today's Sprint Bonus</h3>
         </div>
         <div className="rounded-full bg-primary/10 p-3 text-primary">
           <Zap className="h-5 w-5" />
@@ -225,7 +225,7 @@ function BonusSprintCard({ bonus, onOpen }: { bonus: BonusTodaySummary | null; o
           </div>
         </>
       ) : (
-        <p className="rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">暂无奖励规则</p>
+        <p className="rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">No sprint rules available yet.</p>
       )}
       <button onClick={onOpen} className="w-full rounded-full bg-primary px-5 py-3 text-sm font-bold text-on-primary transition-all active:scale-[0.98]">
         Go to Sprint
@@ -506,7 +506,7 @@ export default function PromoterHomePage() {
                     <p className="text-sm font-semibold">{r.phone_masked}</p>
                     <p className="text-xs text-on-surface-variant">{r.prize_type}{r.reward_code ? ` - ${r.reward_code}` : ""}</p>
                   </div>
-                  <span className="text-xs text-on-surface-variant">{new Date(r.created_at).toLocaleString()}</span>
+                  <span className="text-xs text-on-surface-variant">{new Date(r.created_at).toLocaleString("en-US")}</span>
                 </li>
               ))}
             </ul>

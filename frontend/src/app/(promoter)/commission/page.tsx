@@ -203,7 +203,7 @@ export default function CommissionPage() {
             <article key={record.id} className="bg-surface-container-lowest rounded-xl p-5 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs text-on-surface-variant">{new Date(record.created_at).toLocaleString()}</p>
+                  <p className="text-xs text-on-surface-variant">{new Date(record.created_at).toLocaleString("en-US")}</p>
                   <p className="text-sm font-semibold mt-1">
                     {record.source_staff_name || record.source_staff_no || record.source_info || record.commission_no}
                   </p>
