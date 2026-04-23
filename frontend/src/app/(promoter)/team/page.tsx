@@ -148,7 +148,7 @@ export default function TeamPage() {
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-wider text-on-surface-variant font-bold">Join Date</p>
-                  <p className="font-semibold">{new Date(member.created_at).toLocaleDateString()}</p>
+                  <p className="font-semibold">{new Date(member.created_at).toLocaleDateString("en-US")}</p>
                 </div>
               </div>
             </article>

@@ -146,7 +146,7 @@ export default function WithdrawalSection(props: WithdrawalSectionProps) {
           <article key={request.id} className="rounded-xl bg-surface-container-lowest p-5 shadow-sm space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs text-on-surface-variant">{new Date(request.created_at).toLocaleString()}</p>
+                <p className="text-xs text-on-surface-variant">{new Date(request.created_at).toLocaleString("en-US")}</p>
                 <p className="mt-1 text-lg font-extrabold font-[var(--font-headline)] text-primary">{toPoints(request.amount)}</p>
                 <p className="mt-1 text-xs font-mono text-on-surface-variant">{request.withdrawal_no}</p>
               </div>
