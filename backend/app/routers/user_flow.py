@@ -80,6 +80,65 @@ async def log_risk(db, campaign_id, phone, ip, device_fp, rule, reason):
     })
 
 
+def _get_staff_inactive_reason(staff: dict) -> str | None:
+    if staff.get("status", "active") != "active":
+        return "status_disabled"
+    if staff.get("work_status", "stopped") != "promoting":
+        return "work_not_promoting"
+    if bool(staff.get("promotion_paused", False)):
+        return "promotion_paused"
+    if bool(staff.get("risk_frozen", False)):
+        return "risk_frozen"
+    return None
+
+
+def _is_staff_active(staff: dict) -> bool:
+    return _get_staff_inactive_reason(staff) is None
+
+
+def _normalize_utc(value: datetime | None) -> datetime | None:
+    if value and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+async def _resolve_live_token_status(db, token: dict, now: datetime) -> dict:
+    status = token.get("status", "active")
+    expires_at = _normalize_utc(token.get("expires_at"))
+    if status == "active" and expires_at and expires_at <= now:
+        await db.promo_live_tokens.update_one({"_id": token["_id"]}, {"$set": {"status": "expired"}})
+        updated = dict(token)
+        updated["status"] = "expired"
+        updated["expires_at"] = expires_at
+        return updated
+    if expires_at is token.get("expires_at"):
+        return token
+    updated = dict(token)
+    updated["expires_at"] = expires_at
+    return updated
+
+
+async def _check_live_status_rate_limit(db, ip: str, now: datetime) -> bool:
+    one_min_ago = now - timedelta(seconds=60)
+    recent = await db.risk_logs.count_documents({
+        "ip": ip,
+        "type": "live_status_poll",
+        "created_at": {"$gte": one_min_ago},
+    })
+    if recent >= 30:
+        return False
+    await db.risk_logs.insert_one({
+        "ip": ip,
+        "type": "live_status_poll",
+        "created_at": now,
+        "phone": "",
+        "campaign_id": None,
+        "device_fingerprint": "",
+        "reason": "",
+    })
+    return True
+
+
 async def check_risk(db, phone, ip, device_fp, campaign_id) -> list[dict]:
     """Check all risk rules. Returns list of {rule, reason} dicts."""
     hits = []
@@ -750,16 +809,7 @@ async def pin_verify(payload: PinVerifyRequest, request: Request, db: AsyncIOMot
     if not staff:
         return {"success": False, "error": "not_found", "attempts_remaining": 0}
 
-    staff_status = staff.get("status", "active")
-    work_status = staff.get("work_status", "stopped")
-    promotion_paused = bool(staff.get("promotion_paused", False))
-    risk_frozen = bool(staff.get("risk_frozen", False))
-    if (
-        staff_status != "active"
-        or work_status != "promoting"
-        or promotion_paused
-        or risk_frozen
-    ):
+    if not _is_staff_active(staff):
         return {"success": False, "error": "staff_inactive", "attempts_remaining": 0}
 
     token = await db.promo_live_tokens.find_one({
@@ -827,6 +877,53 @@ async def pin_verify(payload: PinVerifyRequest, request: Request, db: AsyncIOMot
             "name": campaign.get("name", "") if campaign else "",
             "description": campaign.get("description", "") if campaign else "",
         },
+    }
+
+
+@router.get("/live-status")
+async def live_status(
+    staff_code: str,
+    lt: str,
+    request: Request,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    now = datetime.now(timezone.utc)
+    ip = extract_client_ip(request)
+    if not await _check_live_status_rate_limit(db, ip, now):
+        return {"valid": False, "staff_active": False, "qr_version": 0, "pin_version": 0, "reason": "rate_limited"}
+
+    normalized_code = str(staff_code).strip().upper()
+    token_signature = str(lt).strip()
+    staff = await db.staff_users.find_one({"invite_code": normalized_code})
+    if not staff:
+        return {"valid": False, "staff_active": False, "qr_version": 0, "pin_version": 0, "reason": "not_found"}
+
+    staff_active = _is_staff_active(staff)
+    qr_version = int(staff.get("qr_version", 0) or 0)
+    token = await db.promo_live_tokens.find_one({"staff_id": staff["_id"]}, sort=[("created_at", -1)])
+    if not token:
+        return {"valid": False, "staff_active": staff_active, "qr_version": qr_version, "pin_version": 0, "reason": "not_found"}
+
+    token = await _resolve_live_token_status(db, token, now)
+    pin_version = int(token.get("qr_version", 0) or 0)
+    signature_matches = str(token.get("token_signature", "")) == token_signature
+    status = str(token.get("status", "active") or "active")
+    valid = signature_matches and status == "active" and staff_active
+    reason = None
+    if not valid:
+        if not staff_active:
+            reason = "staff_inactive"
+        elif not signature_matches:
+            reason = "rotated"
+        else:
+            reason = status if status in {"expired", "consumed", "locked"} else "rotated"
+
+    return {
+        "valid": valid,
+        "staff_active": staff_active,
+        "qr_version": qr_version,
+        "pin_version": pin_version,
+        "reason": reason,
     }
 
 
