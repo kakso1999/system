@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import type { Staff } from "@/types";
 
@@ -97,6 +98,7 @@ interface StaffFormModalProps {
 
 export default function StaffFormModal(props: StaffFormModalProps) {
   const { editingStaff, form, onFormChange, onClose, onSubmit } = props;
+  const router = useRouter();
   const [controls, setControls] = useState<StaffControlForm>(() => createControlForm(editingStaff));
   const [touchedControls, setTouchedControls] = useState<TouchedControls>({});
   const [submitting, setSubmitting] = useState(false);
@@ -123,7 +125,7 @@ export default function StaffFormModal(props: StaffFormModalProps) {
       const payload = buildEditPayload(form, controls, touchedControls);
       await api.put(`/api/admin/staff/${editingStaff.id}`, payload);
       onClose();
-      window.location.reload();
+      router.refresh();
     } catch (error: unknown) {
       alert(getErrorDetail(error, "保存失败"));
       setSubmitting(false);
