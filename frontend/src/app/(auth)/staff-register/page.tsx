@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { BadgeCheck, User, Phone, Lock, Ticket, UserPlus, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import { getPublicSettings } from "@/lib/public-settings";
@@ -292,9 +293,9 @@ function StaffRegisterForm() {
           )}
 
           <div className="mt-6 text-center">
-            <a href="/staff-login" className="text-sm text-primary font-bold hover:underline">
+            <Link href="/staff-login" className="text-sm text-primary font-bold hover:underline">
               Back to Login
-            </a>
+            </Link>
             {customerServiceWhatsapp.trim() && (
               <div className="mt-3">
                 <a

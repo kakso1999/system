@@ -1,4 +1,5 @@
 import { Ban, CheckCircle, Pencil, Trash2, XCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import type { Staff } from "@/types";
 import { statusBadge, vipLabel } from "./staff-shared";
@@ -33,11 +34,12 @@ function getErrorDetail(error: unknown, fallback: string) {
 
 export default function StaffTable(props: StaffTableProps) {
   const { loading, staffList, onEdit, onUpdateStatus, onDelete } = props;
+  const router = useRouter();
 
   const handleWorkStatusAction = async (staff: Staff, action: "pause" | "resume") => {
     try {
       await api.post(`/api/admin/staff/${staff.id}/${action}`);
-      window.location.reload();
+      router.refresh();
     } catch (error: unknown) {
       const fallback = action === "pause" ? "Failed to pause promoter" : "Failed to resume promoter";
       alert(getErrorDetail(error, fallback));

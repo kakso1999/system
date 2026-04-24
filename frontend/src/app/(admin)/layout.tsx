@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import api from "@/lib/api";
 import { clearAuth, isAuthenticated } from "@/lib/auth";
@@ -115,7 +116,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             const isActive = pathname === item.href;
             const Icon = item.icon;
             return (
-              <a key={item.href} href={item.href}
+              <Link key={item.href} href={item.href} prefetch
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
                   isActive
                     ? "bg-primary text-on-primary shadow-md shadow-primary/20"
@@ -133,7 +134,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     )}
                   </span>
                 )}
-              </a>
+              </Link>
             );
           })}
         </nav>

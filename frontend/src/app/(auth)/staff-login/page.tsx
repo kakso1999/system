@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BadgeCheck, User, Lock, LogIn } from "lucide-react";
 import api from "@/lib/api";
@@ -98,7 +99,7 @@ export default function StaffLoginPage() {
             <div className="mt-6 text-center">
               <p className="text-sm text-on-surface-variant">
                 Don&apos;t have an account?{" "}
-                <a href="/staff-register" className="text-primary font-bold hover:underline">Register here</a>
+                <Link href="/staff-register" className="text-primary font-bold hover:underline">Register here</Link>
               </p>
             </div>
           )}

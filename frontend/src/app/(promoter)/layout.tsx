@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Home, QrCode, Users, Wallet, Coins } from "lucide-react";
@@ -78,7 +79,7 @@ export default function PromoterLayout({ children }: { children: React.ReactNode
 
             if (item.elevated) {
               return (
-                <a
+                <Link
                   key={item.href}
                   href={item.href}
                   className={`-mt-7 flex h-16 w-16 flex-col items-center justify-center rounded-full shadow-lg shadow-primary/20 transition-all ${
@@ -87,19 +88,19 @@ export default function PromoterLayout({ children }: { children: React.ReactNode
                 >
                   <Icon className="h-6 w-6" />
                   <span className="mt-1 text-[9px] font-bold uppercase tracking-wider">QR</span>
-                </a>
+                </Link>
               );
             }
 
             return (
-              <a
+              <Link
                 key={item.href}
                 href={item.href}
                 className={`flex flex-col items-center justify-center py-2 transition-colors ${baseColor}`}
               >
                 <Icon className="h-6 w-6" />
                 <span className="mt-1 text-[11px] font-bold uppercase tracking-wider">{item.label}</span>
-              </a>
+              </Link>
             );
           })}
         </div>
