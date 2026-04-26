@@ -1,0 +1,57 @@
+{
+  "flow": "02-registration-approval",
+  "meta": {},
+  "results": [
+    {
+      "name": "01 captcha issued",
+      "ok": true,
+      "q": "8 + 3 = ?",
+      "answer": "11"
+    },
+    {
+      "name": "02 register submitted",
+      "ok": true,
+      "status": 200,
+      "resp": {
+        "message": "Registration submitted, pending admin approval"
+      }
+    },
+    {
+      "name": "03 registration row pending",
+      "ok": true,
+      "exists": true,
+      "status": "pending",
+      "id": "69e8734d8aa4c33ca3b396b1"
+    },
+    {
+      "name": "04 admin login",
+      "ok": true,
+      "url": "http://localhost:3000/dashboard"
+    },
+    {
+      "name": "05 registration visible in admin list",
+      "ok": true,
+      "username": "test_reg_1776841546631"
+    },
+    {
+      "name": "06 approve API",
+      "ok": true,
+      "status": 200,
+      "approved_id": "69e873568aa4c33ca3b396b2"
+    },
+    {
+      "name": "07 staff_users created with invite_code",
+      "ok": true,
+      "exists": true,
+      "invite_code": "BF1YQM",
+      "status": "active"
+    },
+    {
+      "name": "08 new staff login -> home",
+      "ok": true,
+      "url": "http://localhost:3000/home"
+    }
+  ],
+  "pass": 8,
+  "fail": 0
+}

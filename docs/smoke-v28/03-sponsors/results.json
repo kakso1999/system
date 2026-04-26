@@ -1,0 +1,31 @@
+{
+  "flow": "03-sponsors",
+  "meta": {},
+  "results": [
+    {
+      "name": "01 create sponsor",
+      "ok": true,
+      "status": 201,
+      "id": "69e873608aa4c33ca3b396b4"
+    },
+    {
+      "name": "02 upload logo",
+      "ok": true,
+      "status": 200,
+      "resp": {
+        "logo_url": "/uploads/sponsor_24844367.png"
+      }
+    },
+    {
+      "name": "03 public /api/sponsors/active includes new",
+      "ok": true,
+      "count": 1
+    },
+    {
+      "name": "test_sponsor_1776841567596",
+      "ok": true
+    }
+  ],
+  "pass": 4,
+  "fail": 0
+}

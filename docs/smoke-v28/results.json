@@ -1,0 +1,111 @@
+{
+  "generated_at": "2026-04-22T07:08:59.992Z",
+  "summary": [
+    {
+      "script": "e2e_01_admin_create.mjs",
+      "pass": 6,
+      "fail": 0,
+      "ok": true,
+      "duration_ms": 23213,
+      "err": null
+    },
+    {
+      "script": "e2e_02_registration.mjs",
+      "pass": 8,
+      "fail": 0,
+      "ok": true,
+      "duration_ms": 19806,
+      "err": null
+    },
+    {
+      "script": "e2e_03_sponsors.mjs",
+      "pass": 4,
+      "fail": 0,
+      "ok": true,
+      "duration_ms": 9050,
+      "err": null
+    },
+    {
+      "script": "e2e_04_campaigns.mjs",
+      "pass": 7,
+      "fail": 0,
+      "ok": true,
+      "duration_ms": 13617,
+      "err": null
+    },
+    {
+      "script": "e2e_05_reward_codes.mjs",
+      "pass": 5,
+      "fail": 0,
+      "ok": true,
+      "duration_ms": 12219,
+      "err": null
+    },
+    {
+      "script": "e2e_06_staff_pause.mjs",
+      "pass": 7,
+      "fail": 0,
+      "ok": true,
+      "duration_ms": 15514,
+      "err": null
+    },
+    {
+      "script": "e2e_07_finance.mjs",
+      "pass": 7,
+      "fail": 0,
+      "ok": true,
+      "duration_ms": 11859,
+      "err": null
+    },
+    {
+      "script": "e2e_08_settings.mjs",
+      "pass": 6,
+      "fail": 0,
+      "ok": true,
+      "duration_ms": 9306,
+      "err": null
+    },
+    {
+      "script": "e2e_09_live_qr.mjs",
+      "pass": 6,
+      "fail": 0,
+      "ok": true,
+      "duration_ms": 15319,
+      "err": null
+    },
+    {
+      "script": "e2e_10_bonus.mjs",
+      "pass": 6,
+      "fail": 0,
+      "ok": true,
+      "duration_ms": 11052,
+      "err": null
+    },
+    {
+      "script": "e2e_11_full_claim.mjs",
+      "pass": 11,
+      "fail": 0,
+      "ok": true,
+      "duration_ms": 42934,
+      "err": null
+    },
+    {
+      "script": "e2e_12_risk.mjs",
+      "pass": 5,
+      "fail": 0,
+      "ok": true,
+      "duration_ms": 4202,
+      "err": null
+    },
+    {
+      "script": "e2e_13_external_redeem.mjs",
+      "pass": 7,
+      "fail": 0,
+      "ok": true,
+      "duration_ms": 28740,
+      "err": null
+    }
+  ],
+  "total_pass": 85,
+  "total_fail": 0
+}

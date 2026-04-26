@@ -1,0 +1,61 @@
+{
+  "flow": "11-full-claim",
+  "meta": {},
+  "results": [
+    {
+      "name": "01 welcome loaded",
+      "ok": true
+    },
+    {
+      "name": "02 prizes carousel",
+      "ok": true
+    },
+    {
+      "name": "03 wheel page canvas",
+      "ok": true
+    },
+    {
+      "name": "04 spin result shown",
+      "ok": true
+    },
+    {
+      "name": "05 phone input filled",
+      "ok": true
+    },
+    {
+      "name": "06 otp generated in DB",
+      "ok": true,
+      "otp": "905413"
+    },
+    {
+      "name": "07 otp verified",
+      "ok": true
+    },
+    {
+      "name": "08 claim in DB",
+      "ok": true,
+      "exists": true,
+      "id": "69e873d78aa4c33ca3b396e2",
+      "reward_code": "RCUNIZIB01",
+      "status": "success"
+    },
+    {
+      "name": "09 reward_code allocated",
+      "ok": true,
+      "status": "assigned",
+      "claim_id": ""
+    },
+    {
+      "name": "10 redirected to result",
+      "ok": true,
+      "url": "http://localhost:3000/result/69e873d78aa4c33ca3b396e2?rt=MCjgdqtoARvMbvGVt90xBZzDrfE367QN"
+    },
+    {
+      "name": "11 cross-device view",
+      "ok": true,
+      "rt_found": true
+    }
+  ],
+  "pass": 11,
+  "fail": 0
+}

@@ -1,0 +1,41 @@
+{
+  "flow": "09-live-qr-pin",
+  "meta": {},
+  "results": [
+    {
+      "name": "01 staff login",
+      "ok": true
+    },
+    {
+      "name": "02 live-qr/generate 200",
+      "ok": true,
+      "status": 200,
+      "pin": "459",
+      "qr_version": 21
+    },
+    {
+      "name": "03 qr_version incremented",
+      "ok": true,
+      "before": "20",
+      "after": "21"
+    },
+    {
+      "name": "04 promo_live_tokens active row",
+      "ok": true,
+      "exists": true,
+      "pin": "459"
+    },
+    {
+      "name": "05 rotate old tokens",
+      "ok": true,
+      "pin2": "243",
+      "rotated": "11"
+    },
+    {
+      "name": "06 UI qrcode page renders",
+      "ok": true
+    }
+  ],
+  "pass": 6,
+  "fail": 0
+}

@@ -1,0 +1,41 @@
+{
+  "flow": "01-admin-create",
+  "meta": {},
+  "results": [
+    {
+      "name": "01 create admin API",
+      "ok": true,
+      "status": 201,
+      "id": "69e873358aa4c33ca3b396ac",
+      "username": "test_admin_1776841524568"
+    },
+    {
+      "name": "02 DB admin row created",
+      "ok": true,
+      "exists": true,
+      "must_change": true,
+      "role": "admin"
+    },
+    {
+      "name": "03 UI shows new admin",
+      "ok": true
+    },
+    {
+      "name": "04 new admin login prompts password change",
+      "ok": true,
+      "url": "http://localhost:3000/admin-login"
+    },
+    {
+      "name": "05 password changed -> dashboard",
+      "ok": true,
+      "url": "http://localhost:3000/dashboard"
+    },
+    {
+      "name": "06 DB must_change_password=false (after fix)",
+      "ok": true,
+      "must_change": false
+    }
+  ],
+  "pass": 6,
+  "fail": 0
+}

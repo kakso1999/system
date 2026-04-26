@@ -1,0 +1,49 @@
+{
+  "flow": "10-bonus-ladder",
+  "meta": {},
+  "results": [
+    {
+      "name": "01 bonus rules exist",
+      "ok": true,
+      "count": 1
+    },
+    {
+      "name": "02 staff login",
+      "ok": true
+    },
+    {
+      "name": "03 GET /bonus/today",
+      "ok": true,
+      "tier_count": 3
+    },
+    {
+      "name": "04 3+ tiers returned",
+      "ok": true,
+      "tiers": [
+        {
+          "t": 5
+        },
+        {
+          "t": 10
+        },
+        {
+          "t": 20
+        }
+      ]
+    },
+    {
+      "name": "05 claim tier=1 (may 400 if not reached)",
+      "ok": true,
+      "status": 400,
+      "resp": {
+        "detail": "tier_not_found"
+      }
+    },
+    {
+      "name": "06 UI sprint page renders",
+      "ok": true
+    }
+  ],
+  "pass": 6,
+  "fail": 0
+}

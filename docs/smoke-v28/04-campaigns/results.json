@@ -1,0 +1,61 @@
+{
+  "flow": "04-campaigns",
+  "meta": {},
+  "results": [
+    {
+      "name": "01 seed 2 test staff",
+      "ok": true,
+      "staff_ids": [
+        "69e8736ae60a870c9a34fb42",
+        "69e8736a075f07885d1128e3"
+      ]
+    },
+    {
+      "name": "02 create campaign",
+      "ok": true,
+      "status": 201,
+      "id": "69e8736c8aa4c33ca3b396b5"
+    },
+    {
+      "name": "03 add 3 wheel items",
+      "ok": true,
+      "ids": [
+        "69e8736c8aa4c33ca3b396b6",
+        "69e8736c8aa4c33ca3b396b7",
+        "69e8736c8aa4c33ca3b396b8"
+      ]
+    },
+    {
+      "name": "04 bind 2 staff",
+      "ok": true,
+      "resp": {
+        "message": "Bound 2 staff to campaign"
+      }
+    },
+    {
+      "name": "05 DB staff.campaign_id bound",
+      "ok": true,
+      "staffCheck": [
+        {
+          "u": "test_c4s_1_1776841577553",
+          "cid": "69e8736c8aa4c33ca3b396b5"
+        },
+        {
+          "u": "test_c4s_2_1776841578455",
+          "cid": "69e8736c8aa4c33ca3b396b5"
+        }
+      ]
+    },
+    {
+      "name": "06 activate campaign",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "name": "07 UI lists campaign",
+      "ok": true
+    }
+  ],
+  "pass": 7,
+  "fail": 0
+}

@@ -1,0 +1,67 @@
+{
+  "flow": "13-external-redeem",
+  "meta": {},
+  "results": [
+    {
+      "name": "01 prepared reward_code via UI",
+      "ok": true,
+      "id": "69e874028aa4c33ca3b396f6",
+      "reward_code": "RC3X2RCELL",
+      "settlement_status": "pending_redeem"
+    },
+    {
+      "name": "02 redeem/verify",
+      "ok": true,
+      "status": 200,
+      "resp": {
+        "exists": true,
+        "status": "assigned",
+        "campaign_id": "69d5d011514405fc970bd1df",
+        "phone": "+63******3322",
+        "created_at": "2026-04-22T07:08:50.580000"
+      }
+    },
+    {
+      "name": "03 verify rejects bad key",
+      "ok": true,
+      "status": 403
+    },
+    {
+      "name": "04 redeem/claim first ok",
+      "ok": true,
+      "status": 200,
+      "resp": {
+        "success": true,
+        "message": "Reward code redeemed successfully"
+      }
+    },
+    {
+      "name": "05 DB reward_code redeemed",
+      "ok": true,
+      "status": "redeemed",
+      "redeemed_at": "2026-04-22 07:08:56.669000"
+    },
+    {
+      "name": "06 commission_logs transition",
+      "ok": true,
+      "rows": [
+        {
+          "status": "approved",
+          "amount": 1.2,
+          "level": 1
+        }
+      ]
+    },
+    {
+      "name": "07 redeem/claim second = already_redeemed",
+      "ok": true,
+      "status": 200,
+      "resp": {
+        "success": false,
+        "message": "Reward code already redeemed"
+      }
+    }
+  ],
+  "pass": 7,
+  "fail": 0
+}

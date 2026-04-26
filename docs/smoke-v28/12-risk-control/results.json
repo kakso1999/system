@@ -1,0 +1,39 @@
+{
+  "flow": "12-risk-control",
+  "meta": {},
+  "results": [
+    {
+      "name": "01 qr_version_mismatch 404",
+      "ok": true,
+      "status": 404
+    },
+    {
+      "name": "02 welcome OK with current v",
+      "ok": true,
+      "status": 200,
+      "v": "23"
+    },
+    {
+      "name": "03 spin succeeded",
+      "ok": true,
+      "prize": "website",
+      "token_len": 32
+    },
+    {
+      "name": "04 duplicate-phone blocked",
+      "ok": true,
+      "status": 200,
+      "resp": {
+        "success": false,
+        "message": "Phone number not verified. Please complete SMS verification first."
+      }
+    },
+    {
+      "name": "05 risk_logs entry exists",
+      "ok": true,
+      "risk_logs": "1"
+    }
+  ],
+  "pass": 5,
+  "fail": 0
+}

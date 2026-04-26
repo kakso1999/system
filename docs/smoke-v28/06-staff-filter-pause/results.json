@@ -1,0 +1,45 @@
+{
+  "flow": "06-staff-filter-pause",
+  "meta": {},
+  "results": [
+    {
+      "name": "01 target staff exists",
+      "ok": true,
+      "id": "69e5ab6f004a7c080c384e68",
+      "work_status": "promoting"
+    },
+    {
+      "name": "02 pause API",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "name": "03 DB work_status=paused",
+      "ok": true,
+      "work_status": "paused",
+      "paused": true
+    },
+    {
+      "name": "04 live tokens deactivated",
+      "ok": true,
+      "active_tokens": "0"
+    },
+    {
+      "name": "05 resume API",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "name": "06 DB work_status=promoting",
+      "ok": true,
+      "work_status": "promoting"
+    },
+    {
+      "name": "07 UI staff list shows target",
+      "ok": true,
+      "page": "/staff"
+    }
+  ],
+  "pass": 7,
+  "fail": 0
+}

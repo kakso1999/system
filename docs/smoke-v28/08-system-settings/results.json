@@ -1,0 +1,51 @@
+{
+  "flow": "08-system-settings",
+  "meta": {},
+  "results": [
+    {
+      "name": "01 read originals",
+      "ok": true,
+      "project_name": "GroundRewards",
+      "customer_service_whatsapp": "",
+      "default_redirect_url": "",
+      "live_qr_enabled": false,
+      "sms_verification": true,
+      "sms_real_send_enabled": false,
+      "external_api_key": "E2E_TEST_KEY_v28"
+    },
+    {
+      "name": "02 PUT all settings",
+      "ok": true
+    },
+    {
+      "name": "03 DB reflects new settings",
+      "ok": true,
+      "project_name": "E2E_TEST_1776841630841",
+      "customer_service_whatsapp": "https://wa.me/99988877766",
+      "default_redirect_url": "https://example.com/go",
+      "live_qr_enabled": false,
+      "sms_verification": true,
+      "sms_real_send_enabled": false,
+      "external_api_key": "E2E_KEY_1776841630841"
+    },
+    {
+      "name": "04 public-settings propagates project_name",
+      "ok": true,
+      "project_name": "E2E_TEST_1776841630841",
+      "whatsapp": "https://wa.me/99988877766"
+    },
+    {
+      "name": "05 UI project_name reflected on welcome",
+      "ok": true,
+      "hasName": true,
+      "qrV": "20",
+      "project_name": "E2E_TEST_1776841630841"
+    },
+    {
+      "name": "06 restored originals",
+      "ok": true
+    }
+  ],
+  "pass": 6,
+  "fail": 0
+}

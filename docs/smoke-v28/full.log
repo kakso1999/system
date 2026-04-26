@@ -1,0 +1,17 @@
+✅ e2e_01_admin_create.mjs  6P/0F  23213ms
+✅ e2e_02_registration.mjs  8P/0F  19806ms
+✅ e2e_03_sponsors.mjs  4P/0F  9050ms
+✅ e2e_04_campaigns.mjs  7P/0F  13617ms
+✅ e2e_05_reward_codes.mjs  5P/0F  12219ms
+✅ e2e_06_staff_pause.mjs  7P/0F  15514ms
+✅ e2e_07_finance.mjs  7P/0F  11859ms
+✅ e2e_08_settings.mjs  6P/0F  9306ms
+✅ e2e_09_live_qr.mjs  6P/0F  15319ms
+✅ e2e_10_bonus.mjs  6P/0F  11052ms
+✅ e2e_11_full_claim.mjs  11P/0F  42934ms
+✅ e2e_12_risk.mjs  5P/0F  4202ms
+✅ e2e_13_external_redeem.mjs  7P/0F  28740ms
+
+=== Totals ===
+Pass: 85
+Fail: 0

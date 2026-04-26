@@ -1,0 +1,37 @@
+{
+  "flow": "05-reward-codes-import",
+  "meta": {},
+  "results": [
+    {
+      "name": "01 paste import 3 codes",
+      "ok": true,
+      "resp": {
+        "message": "Imported 3 codes"
+      }
+    },
+    {
+      "name": "02 DB has 3 codes",
+      "ok": true,
+      "count": "3"
+    },
+    {
+      "name": "03 upload import 5 codes",
+      "ok": true,
+      "resp": {
+        "message": "Imported 5 codes"
+      }
+    },
+    {
+      "name": "04 total 8 codes",
+      "ok": true,
+      "total": "8"
+    },
+    {
+      "name": "05 API /reward-codes list includes imported",
+      "ok": true,
+      "total_rows": 77
+    }
+  ],
+  "pass": 5,
+  "fail": 0
+}

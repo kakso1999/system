@@ -1,0 +1,56 @@
+{
+  "flow": "07-finance-settle",
+  "meta": {},
+  "results": [
+    {
+      "name": "01 seed staff+claim+commission_log",
+      "ok": true,
+      "sid": "69e87392ba66bea5c50a69b7",
+      "cid": "69e87392ba66bea5c50a69b8",
+      "log_status": "approved"
+    },
+    {
+      "name": "02 manual-settle API",
+      "ok": true,
+      "status": 200,
+      "resp": {
+        "message": "Settled 1 claim records"
+      }
+    },
+    {
+      "name": "03 DB status paid",
+      "ok": true,
+      "claim_status": "paid",
+      "log_status": "paid"
+    },
+    {
+      "name": "04 reject mismatched amount",
+      "ok": true,
+      "status": 400
+    },
+    {
+      "name": "05 reconciliation 200",
+      "ok": true,
+      "keys": [
+        "payable_cents",
+        "paid_cents",
+        "frozen_cents",
+        "bonus_pending_count",
+        "anomaly_count",
+        "anomaly_sample"
+      ]
+    },
+    {
+      "name": "06 CSV exports 200",
+      "ok": true,
+      "commissions": 200,
+      "withdrawals": 200
+    },
+    {
+      "name": "07 UI finance page renders",
+      "ok": true
+    }
+  ],
+  "pass": 7,
+  "fail": 0
+}
